@@ -1,6 +1,6 @@
 Privacy Policy for Polirizer
 
-Last updated: [Current Date]
+Last updated: [15-Oct-2024]
 
 1. Introduction
 
