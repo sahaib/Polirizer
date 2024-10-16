@@ -1,11 +1,17 @@
-console.log('popup.js started');
-window.onerror = function(message, source, lineno, colno, error) {
-    // Error logging can be replaced with a production-ready error tracking solution
-};
+// Add this debounce function at the top of your file
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM Content Loaded');
-    
     const inputText = document.getElementById('inputText');
     const modelSelect = document.getElementById('modelSelect');
     const summarizeBtn = document.getElementById('summarizeBtn');
@@ -16,16 +22,25 @@ document.addEventListener('DOMContentLoaded', function() {
     const closeSettingsBtn = document.getElementById('closeSettingsBtn');
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
     const copyButton = document.getElementById('copyButton');
+    const ttsButton = document.getElementById('ttsButton');
+    const ttsVoiceSelect = document.getElementById('ttsVoiceSelect');
     let lastInput = '';
     let lastModel = '';
+    let currentAudio = null;
+    let preloadedAudio = null;
+    let isPreloading = false;
+    let ttsEndpointUrl = 'https://summariser-test-f7ab30f38c51.herokuapp.com/tts'; // Default URL
 
-    console.log('summarizeBtn:', summarizeBtn);
-    console.log('settingsBtn:', settingsBtn);
-    console.log('loaderContainer:', loaderContainer);
-    console.log('copyButton:', copyButton);
-
-    function debugLog(message) {
-        // Debug logging removed for production
+    function showToast(message) {
+        let toast = document.getElementById('toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'toast';
+            document.body.appendChild(toast);
+        }
+        toast.textContent = message;
+        toast.className = 'show';
+        setTimeout(() => { toast.className = toast.className.replace('show', ''); }, 3000);
     }
 
     async function getApiKey(keyName) {
@@ -44,32 +59,33 @@ document.addEventListener('DOMContentLoaded', function() {
     async function fetchUrlContent(url) {
         try {
             const response = await fetch(url);
-            const html = await response.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            return doc.body.innerText;
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('text/html')) {
+                const text = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/html');
+                return doc.body.innerText;
+            } else {
+                return await response.text();
+            }
         } catch (error) {
             throw error;
         }
     }
 
     async function sendSummarizeRequest(input, model, apiKey) {
-        console.log(`Sending summarize request for model: ${model}`);
-        console.log(`API Key provided: ${apiKey ? 'Yes' : 'No'}`);
-        const userId = await getUserId();
-        let requestData = { 
-            input, 
-            model, 
-            user_id: userId
-        };
-
-        if (apiKey) {
-            requestData.api_key = apiKey;
-        }
-
-        console.log('Full request data:', JSON.stringify({...requestData, api_key: apiKey ? `${apiKey.substring(0, 5)}...` : undefined}));
-        
         try {
+            const userId = await getUserId();
+            let requestData = { 
+                input, 
+                model, 
+                user_id: userId
+            };
+
+            if (apiKey) {
+                requestData.api_key = apiKey;
+            }
+
             const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/summarize', {
                 method: 'POST',
                 headers: {
@@ -78,22 +94,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 body: JSON.stringify(requestData)
             });
 
-            const data = await response.json();
-            console.log('Server response:', data);
-
             if (!response.ok) {
-                throw new Error(data.error || 'An error occurred while summarizing');
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            if (data.free_summaries_left !== undefined) {
-                updateFreeSummariesDisplay(data.free_summaries_left);
-            }
+            const data = await response.json();
 
-            return data;
+            if (data.summary) {
+                return data.summary;
+            } else if (data.error) {
+                throw new Error(data.error);
+            } else {
+                throw new Error('Unexpected response format');
+            }
         } catch (error) {
-            console.error('Error in sendSummarizeRequest:', error);
-            throw error;
+            // Instead of logging to console, we'll throw the error to be handled by the caller
+            throw new Error(`Failed to summarize: ${error.message}`);
         }
+    }
+
+    function debugLog(message) {
+        // Debug logging removed for production
     }
 
     async function getUserId() {
@@ -104,7 +125,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     userId = 'user_' + Math.random().toString(36).substr(2, 9);
                     chrome.storage.local.set({userId: userId});
                 }
-                console.log('User ID:', userId);
                 resolve(userId);
             });
         });
@@ -128,21 +148,17 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('inputText').style.display = 'none';
             document.getElementById('modelSelect').style.display = 'none';
             summarizeBtn.style.display = 'none';
-        } else {
-            console.error('loaderContainer is null');
         }
     }
 
     function hideLoader() {
         if (loaderContainer) {
             loaderContainer.style.display = 'none';
-            // Show other elements
+            // Show other elements™
             document.getElementById('inputText').style.display = 'block';
             document.getElementById('modelSelect').style.display = 'inline-block';
             summarizeBtn.style.display = 'inline-block';
             // resultContainer will be shown by displaySummary or displayError
-        } else {
-            console.error('loaderContainer is null');
         }
     }
 
@@ -154,25 +170,27 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    function showToast(message) {
-        let toast = document.getElementById('toast');
-        if (!toast) {
-            toast = document.createElement('div');
-            toast.id = 'toast';
-            document.body.appendChild(toast);
-        }
-        toast.textContent = message;
-        toast.className = 'show';
-        setTimeout(() => { toast.className = toast.className.replace('show', ''); }, 3000);
-    }
-
     function isInputValid(input) {
-        const minLength = 50; // Adjust this value as needed
-        return input.trim().length >= minLength;
+        const minLength = 50; // Minimum length for text input
+        const urlPattern = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
+
+        // Check if the input is a valid URL
+        if (urlPattern.test(input)) {
+            return true; // Always consider URLs as valid input
+        }
+
+        // For non-URL input, check the length
+        if (input.trim().length < minLength) {
+            displayError(`Please enter at least ${minLength} characters or a valid URL.`);
+            return false;
+        }
+
+        return true;
     }
 
+    // Modify the event listener for the summarize button (around line 179)
     if (summarizeBtn) {
-        summarizeBtn.addEventListener('click', async function() {
+        summarizeBtn.addEventListener('click', debounce(async function() {
             if (summarizeBtn.disabled) return;
             
             const input = inputText.value.trim();
@@ -183,45 +201,88 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            if (!isInputValid(input)) {
-                displayError('The input is too short. Please provide a longer text or a valid URL.');
+            // Add this near the beginning of the click event listener, after getting the input
+            const maxInputLength = 50000; // Adjust this value as needed
+            if (input.length > maxInputLength) {
+                displayError(`Input is too long. Please limit your input to ${maxInputLength} characters.`);
                 return;
+            }
+
+            // Replace lines 190-192 with this improved URL detection logic
+            const urlRegex = /https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)/gi;
+            const urlMatches = input.match(urlRegex);
+
+            if (urlMatches && urlMatches.length > 1) {
+                displayError('Please enter only one URL or paste the privacy policy text directly. Multiple URLs are not supported.');
+                return;
+            }
+
+            if (urlMatches && urlMatches.length === 1) {
+                // Single URL detected
+                let url = urlMatches[0];
+                inputText.value = url; // Update the input field with the detected URL
+            } else if (urlMatches && urlMatches.length === 0) {
+                // No URL detected, check if the input contains "http" or "https"
+                if (input.includes('http://') || input.includes('https://')) {
+                    displayError('Invalid URL format. Please enter a valid URL or paste the privacy policy text directly.');
+                    return;
+                }
+            }
+
+            if (!isInputValid(input)) {
+                return; // The error message is already displayed by isInputValid
             }
 
             summarizeBtn.disabled = true;
             showLoader();
-            
+
             try {
-                let processedInput = input;
-                if (input.startsWith('http://') || input.startsWith('https://')) {
-                    processedInput = await fetchUrlContent(input);
-                }
-                
-                let apiKey = null;
-                if (['mistral-small-latest', 'gpt-4o-mini', 'claude-3-5-sonnet-20240620', 'gemini-1.5-flash-8b'].includes(model)) {
-                    apiKey = await getApiKey(`${model}ApiKey`);
-                    
-                    if (!apiKey) {
-                        throw new Error(`API key not found for ${model}. Please set the API key in the settings.`);
-                    }
+                const apiKey = await getApiKey(`${model}ApiKey`);
+                if (!apiKey) {
+                    throw new Error('API key not found');
                 }
 
-                const result = await sendSummarizeRequest(processedInput, model, apiKey);
-                console.log('Summarize request result:', result);
-                if (result.summary) {
-                    displaySummary(result.summary);
-                } else {
-                    throw new Error('No summary returned from the server');
+                let textToSummarize = input;
+                if (urlMatches && urlMatches.length === 1) {
+                    textToSummarize = await fetchUrlContent(inputText.value);
                 }
+
+                const summary = await sendSummarizeRequest(textToSummarize, model, apiKey);
+                displaySummary(summary, model);
+                lastInput = input;
+                lastModel = model;
             } catch (error) {
-                displayError(error.message);
+                if (error.message === 'API key not found') {
+                    displayError('You have used all your free summaries. Enter your API key(s) to continue.');
+                } else {
+                    displayError(error.message);
+                }
             } finally {
                 hideLoader();
                 summarizeBtn.disabled = false;
             }
-        });
-    } else {
-        console.error('summarizeBtn is null');
+        }, 300)); // 300ms debounce time
+    }
+
+    async function scrapeWebsite(url) {
+        try {
+            const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/scrape', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ url })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            return data.content;
+        } catch (error) {
+            throw new Error('Failed to scrape website content. Please try pasting the text directly.');
+        }
     }
 
     // Add this function to get the current free summaries count
@@ -239,7 +300,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
             return data.free_summaries_left !== undefined ? data.free_summaries_left : 0;
         } catch (error) {
-            console.error('Error fetching free summaries count:', error);
             return 0;
         }
     }
@@ -247,15 +307,12 @@ document.addEventListener('DOMContentLoaded', function() {
     function closeSettingsModal() {
         if (settingsModal) {
             settingsModal.style.display = 'none';
-            console.log('Settings modal forcibly closed, new display style:', settingsModal.style.display);
         }
     }
 
     if (settingsBtn && settingsModal) {
         settingsBtn.addEventListener('click', function() {
-            console.log('Settings button clicked');
             settingsModal.style.display = 'block';
-            console.log('Settings modal opened, display style:', settingsModal.style.display);
             loadApiKeysIntoSettingsForm();
         });
     }
@@ -274,14 +331,15 @@ document.addEventListener('DOMContentLoaded', function() {
             const claudeApiKey = document.getElementById('claudeApiKeyInput').value;
             const geminiApiKey = document.getElementById('geminiApiKeyInput').value;
             const mistralApiKey = document.getElementById('mistralApiKeyInput').value;
+            const newVoice = document.getElementById('ttsVoiceSelect').value;
 
             chrome.storage.local.set({
                 'gpt-4o-miniApiKey': gpt4oMiniApiKey,
-                'claude-3-5-sonnet-20240620ApiKey': claudeApiKey,  // Update this line
+                'claude-3-5-sonnet-20240620ApiKey': claudeApiKey,
                 'gemini-1.5-flash-8bApiKey': geminiApiKey,
-                'mistral-small-latestApiKey': mistralApiKey
+                'mistral-small-latestApiKey': mistralApiKey,
+                'ttsVoice': newVoice
             }, function() {
-                console.log('API keys saved');
                 closeSettingsModal();
                 updateModelSelectOptions();
                 showToast("Settings saved successfully!");
@@ -292,95 +350,84 @@ document.addEventListener('DOMContentLoaded', function() {
     if (settingsModal) {
         window.addEventListener('click', function(event) {
             if (event.target == settingsModal) {
-                console.log('Clicked outside settings modal');
                 closeSettingsModal();
             }
         });
-    }
-
-    if (settingsModal) {
-        console.log('Initial settings modal display style:', settingsModal.style.display);
     }
 
     function formatSummary(summary) {
         // Remove any leading HTML tags
         summary = summary.replace(/^<[^>]+>/, '');
 
-        const sections = summary.split(/\n(?=(?:\d+\.|\*\*)[^*]+\*\*)/);
+        const sections = summary.split(/<h[1-6]>/);
         let formattedSummary = '<div class="summary-content">';
 
-        sections.forEach((section) => {
+        sections.forEach((section, index) => {
             if (section.trim()) {
-                const lines = section.split('\n');
-                const titleMatch = lines[0].match(/^(?:(\d+\.)\s+)?(\*\*)(.+?)(\*\*)(\s+[\u{1F300}-\u{1F5FF}\u{1F900}-\u{1F9FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}])?/u);
-                
-                if (titleMatch) {
-                    const [, number, , title, , emoji] = titleMatch;
-                    formattedSummary += `<h3>${number || ''}${title}${emoji || ''}</h3>`;
-                } else if (lines[0].trim()) {
-                    // If it's not a matched title but not empty, treat it as a regular paragraph
-                    formattedSummary += `<p>${lines[0]}</p>`;
+                const [title, ...content] = section.split('</h');
+                if (index > 0) { // Skip the first split as it's before the first header
+                    const headerLevel = summary.match(new RegExp(`<h(\\d)>${title}`))[1];
+                    formattedSummary += `<h${headerLevel}>${title}</h${headerLevel}>`;
                 }
-
-                const content = lines.slice(1).join('\n').trim();
-                const points = content.split('\n').filter(point => point.trim());
                 
-                if (points.length > 0) {
-                    formattedSummary += '<ul>';
-                    points.forEach(point => {
-                        const formattedPoint = point.trim()
-                            .replace(/^[-•🔹🔸]\s*/, '') // Remove common bullet point characters
-                            .replace(/^\*\*(.+?)\*\*/, '<strong>$1</strong>'); // Convert **text** to <strong>text</strong>
-                        formattedSummary += `<li>${formattedPoint}</li>`;
-                    });
-                    formattedSummary += '</ul>';
+                if (content.length > 0) {
+                    const contentText = content.join('</h'); // Rejoin any accidental splits
+                    const listItems = contentText.split(/(?:^|\n)[-•]/);
+                    
+                    if (listItems.length > 1) {
+                        formattedSummary += '<ul>';
+                        listItems.forEach((item) => {
+                            const trimmedItem = item.trim();
+                            if (trimmedItem) {
+                                formattedSummary += `<li>${trimmedItem}</li>`;
+                            }
+                        });
+                        formattedSummary += '</ul>';
+                    } else {
+                        formattedSummary += `<p>${contentText.trim()}</p>`;
+                    }
                 }
             }
         });
-
-        // Add the disclaimer at the end of the summary
-        formattedSummary += `
-            <div class="disclaimer">
-                <h4>Disclaimer:</h4>
-                <p>This tool is for informational purposes only. Always read the full privacy policy for complete information.</p>
-            </div>
-        `;
 
         formattedSummary += '</div>';
         return formattedSummary;
     }
 
-    function displaySummary(summary) {
+    function displaySummary(summary, model) {
         const resultContainer = document.getElementById('resultContainer');
         const summaryContainer = document.getElementById('summaryContainer');
         const resultDiv = document.getElementById('resultDiv');
         const copyButton = document.getElementById('copyButton');
         const summaryHeader = document.querySelector('.summary-header');
-
-        if (summary.trim() === '<div class="summary-content"></div>' || summary.trim() === '') {
-            displayError("No summary content received. Please try again.");
-            return;
-        }
-
+        
         // Show summary-related elements
         summaryContainer.style.display = 'block';
-        copyButton.style.display = 'block';
+        copyButton.style.display = 'inline-block';
         summaryHeader.style.display = 'flex';
+        
+        // Clear previous content
+        summaryContainer.innerHTML = '';
+        resultDiv.innerHTML = '';
+        
+        // Add this line to standardize the response
+        const standardizedSummary = standardizeModelResponse(summary, model);
 
-        const formattedSummary = formatSummary(summary);
-        const sanitizedSummary = DOMPurify.sanitize(formattedSummary);
+        // Then use standardizedSummary instead of summary when setting the HTML content
+        summaryContainer.innerHTML = standardizedSummary;
         
-        // Split the summary and disclaimer
-        const summaryParts = sanitizedSummary.split('<div class="disclaimer">');
-        
-        summaryContainer.innerHTML = summaryParts[0];
-        if (summaryParts.length > 1) {
-            resultDiv.innerHTML = '<div class="disclaimer">' + summaryParts[1];
-        } else {
-            resultDiv.innerHTML = '';
-        }
+        // Add the disclaimer
+        resultDiv.innerHTML = `
+            <div class="disclaimer">
+                <h4>Disclaimer:</h4>
+                <p>This tool is for informational purposes only. Always read the full privacy policy for complete information.</p>
+            </div>
+        `;
         
         resultContainer.style.display = 'block';
+
+        showToast("Preparing audio. It will be available soon.");
+        preloadAudioWithCurrentSettings();
     }
     
     function displayError(errorMessage) {
@@ -407,6 +454,21 @@ document.addEventListener('DOMContentLoaded', function() {
         
         resultDiv.appendChild(errorDiv);
         resultContainer.style.display = 'block';
+
+        // Only add the "Open Settings" button if it's the API key error
+        if (errorMessage.includes('Enter your API key')) {
+            const openSettingsBtn = document.createElement('button');
+            openSettingsBtn.id = 'openSettingsBtn';
+            openSettingsBtn.className = 'action-button';
+            openSettingsBtn.textContent = 'Open Settings';
+            openSettingsBtn.addEventListener('click', function() {
+                if (settingsModal) {
+                    settingsModal.style.display = 'block';
+                    loadApiKeysIntoSettingsForm();
+                }
+            });
+            errorDiv.appendChild(openSettingsBtn);
+        }
     }
 
 
@@ -435,11 +497,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.free_summaries_left !== undefined) {
                 updateFreeSummariesDisplay(data.free_summaries_left);
             } else {
-                console.error('Server did not return free_summaries_left');
                 updateFreeSummariesDisplay(0);
             }
         } catch (error) {
-            console.error('Error fetching free summaries count:', error);
             updateFreeSummariesDisplay(0);
         }
     }
@@ -475,34 +535,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // Move the copyButton event listener inside the DOMContentLoaded event
     if (copyButton) {
         copyButton.addEventListener('click', function() {
-            const summaryContent = resultDiv.innerText;
+            const summaryContent = document.getElementById('summaryContainer').innerText;
             navigator.clipboard.writeText(summaryContent).then(function() {
                 showToast("Summary copied to clipboard!");
             }).catch(function(err) {
-                console.error('Failed to copy text: ', err);
                 showToast("Failed to copy summary. Please try again.");
             });
         });
-    } else {
-        console.error('copyButton is null');
-    }
-
-    // Add this function to handle website scraping
-    async function scrapeWebsite(url) {
-        const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/scrape', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ url })
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        return data.content;
     }
 
     // Add this function to load API keys into the settings form
@@ -517,7 +556,253 @@ document.addEventListener('DOMContentLoaded', function() {
             if (claudeInput) claudeInput.value = result['claude-3-5-sonnet-20240620ApiKey'] || '';
             if (geminiInput) geminiInput.value = result['gemini-1.5-flash-8bApiKey'] || '';
             if (mistralInput) mistralInput.value = result['mistral-small-latestApiKey'] || '';
-            console.log('API keys loaded into settings form');
         });
     }
+
+    // Load saved voice preference
+    chrome.storage.local.get(['ttsVoice'], function(result) {
+        if (result.ttsVoice) {
+            ttsVoiceSelect.value = result.ttsVoice;
+        }
+    });
+
+    // Save voice preference when changed
+    ttsVoiceSelect.addEventListener('change', function() {
+        const newVoice = ttsVoiceSelect.value;
+        chrome.storage.local.set({ ttsVoice: newVoice }, function() {
+            showToast("Voice updated. Preparing new audio...");
+            preloadAudioWithCurrentSettings();
+        });
+    });
+
+    ttsButton.addEventListener('click', function() {
+        if (currentAudio) {
+            if (currentAudio.paused) {
+                currentAudio.play().catch(e => {
+                    showToast("Error playing audio. Please try again.");
+                });
+                ttsButton.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="6" y="4" width="4" height="16"></rect>
+                        <rect x="14" y="4" width="4" height="16"></rect>
+                    </svg>
+                `;
+            } else {
+                currentAudio.pause();
+                ttsButton.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 5L6 9H2v6h4l5 4V5zM19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                    </svg>
+                `;
+            }
+        } else if (preloadedAudio) {
+            currentAudio = preloadedAudio;
+            currentAudio.play().catch(e => {
+                showToast("Error playing audio. Please try again.");
+            });
+            ttsButton.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="6" y="4" width="4" height="16"></rect>
+                    <rect x="14" y="4" width="4" height="16"></rect>
+                </svg>
+            `;
+
+            currentAudio.onended = function() {
+                ttsButton.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 5L6 9H2v6h4l5 4V5zM19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                    </svg>
+                `;
+                currentAudio = null;
+            };
+        } else if (isPreloading) {
+            showToast("Audio is being prepared. Please wait a moment and try again.");
+        } else {
+            showToast("Audio is not available. Please generate a new summary and try again.");
+            preloadAudioWithCurrentSettings(); // Attempt to preload audio again
+        }
+    });
+
+    function standardizeModelResponse(response, model) {
+        let standardizedResponse = response;
+
+        // Remove introductory text
+        standardizedResponse = standardizedResponse.replace(/^Here's a summary of the privacy policy.*?:\s*/i, '');
+
+        // Remove concluding phrases
+        standardizedResponse = standardizedResponse.replace(/\s*(Let me know if|If you have any|Please let me know|Is there anything else).*?$/i, '');
+
+        // Convert problematic characters to proper bullet points
+        standardizedResponse = standardizedResponse
+            .replace(/â€¢/g, '•')
+            .replace(/[\u2022\u2023\u2043]/g, '•')
+            .trim();
+
+        // Standardize headers (including ###)
+        standardizedResponse = standardizedResponse.replace(/^(#{1,6})\s*(.*?)$/gm, (match, hashes, title) => {
+            const level = Math.min(hashes.length, 6); // Ensure header level is between 1 and 6
+            return `<h${level}>${title.trim()}</h${level}>`;
+        });
+
+        // Handle headers with ** and convert to proper HTML headers
+        standardizedResponse = standardizedResponse.replace(/^\*\*(.*?)\*\*$/gm, (match, content) => {
+        return `<h3>${content.trim()}</h3>`;
+        });
+
+        // Handle inline bold text (if any remains after header conversion)
+        standardizedResponse = standardizedResponse.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+        // Convert numbered lists to HTML ordered lists
+        let inOrderedList = false;
+        standardizedResponse = standardizedResponse.split('\n').map((line, index, array) => {
+            const trimmedLine = line.trim();
+            const numberMatch = trimmedLine.match(/^(\d+)\.\s(.*)$/);
+            if (numberMatch) {
+                if (!inOrderedList) {
+                    inOrderedList = true;
+                    return `<ol><li>${numberMatch[2]}</li>`;
+                }
+                return `<li>${numberMatch[2]}</li>`;
+            } else if (inOrderedList) {
+                inOrderedList = false;
+                return `</ol>${line}`;
+            } else {
+                return line;
+            }
+        }).join('\n');
+
+        if (inOrderedList) {
+            standardizedResponse += '</ol>';
+        }
+
+       // Convert bullet points to HTML list items
+       let inList = false;
+       standardizedResponse = standardizedResponse.split('\n').map(line => {
+           const trimmedLine = line.trim();
+        if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('• ')) {
+            if (!inList) {
+                inList = true;
+                return '<ul><li>' + trimmedLine.substring(2) + '</li>';
+            }
+            return '<li>' + trimmedLine.substring(2) + '</li>';
+        } else if (inList) {
+            inList = false;
+            return '</ul>' + line;
+        } else {
+            return '<p>' + line + '</p>';
+            }
+        }).join('');
+
+        if (inList) {
+            standardizedResponse += '</ul>';
+        }
+
+        // Wrap the entire response in a summary-content div
+        standardizedResponse = `<div class="summary-content">${standardizedResponse}</div>`;
+
+        return standardizedResponse;
+    }
+
+    // Update the ttsVoiceSelect options to match GPT TTS voices
+    const ttsVoiceOptions = [
+        { value: 'alloy', text: 'Alloy' },
+        { value: 'echo', text: 'Echo' },
+        { value: 'fable', text: 'Fable' },
+        { value: 'onyx', text: 'Onyx' },
+        { value: 'nova', text: 'Nova' },
+        { value: 'shimmer', text: 'Shimmer' }
+    ];
+
+    // Populate the ttsVoiceSelect dropdown
+    ttsVoiceOptions.forEach(option => {
+        const optionElement = document.createElement('option');
+        optionElement.value = option.value;
+        optionElement.textContent = option.text;
+        ttsVoiceSelect.appendChild(optionElement);
+    });
+
+    // Update the preloadAudio function to handle GPT TTS response
+    function preloadAudio(text, voice, callback) {
+        isPreloading = true;
+        showToast("Preparing audio. It will be available soon.");
+        
+        fetch(ttsEndpointUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                text: text,
+                voice: voice
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(errorData => {
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                });
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            if (blob.type === 'audio/mpeg') {
+                const audioUrl = URL.createObjectURL(blob);
+                preloadedAudio = new Audio(audioUrl);
+                preloadedAudio.onerror = function(e) {
+                    throw new Error('Failed to load audio');
+                };
+                preloadedAudio.oncanplaythrough = function() {
+                    isPreloading = false;
+                    showToast("Audio is ready to play!");
+                    if (callback) callback(preloadedAudio);
+                };
+            } else {
+                throw new Error(`Received non-audio blob: ${blob.type}`);
+            }
+        })
+        .catch(error => {
+            isPreloading = false;
+            showToast(`Failed to prepare audio: ${error.message}`);
+            if (callback) callback(null);
+        });
+    }
+
+    // Update the preloadAudioWithCurrentSettings function
+    function preloadAudioWithCurrentSettings() {
+        const summaryContainer = document.getElementById('summaryContainer');
+        const resultDiv = document.getElementById('resultDiv');
+        
+        if (summaryContainer && resultDiv) {
+            const summaryText = summaryContainer.innerText;
+            const disclaimerText = resultDiv.innerText;
+            const fullText = summaryText + ' ' + disclaimerText;
+
+            chrome.storage.local.get(['ttsVoice'], function(result) {
+                const selectedVoice = result.ttsVoice || 'nova'; // Default to 'nova' if not set
+                preloadAudio(fullText, selectedVoice, (audio) => {
+                    if (audio) {
+                        preloadedAudio = audio;
+                        currentAudio = null; // Reset currentAudio when new audio is preloaded
+                        showToast("New audio is ready with the updated voice.");
+                    } else {
+                        showToast("Failed to prepare audio with the new voice.");
+                    }
+                });
+            });
+        }
+    }
+
+    // Add this function to fetch the TTS endpoint URL
+    function fetchTtsEndpointUrl() {
+        fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/get_tts_endpoint')
+            .then(response => response.json())
+            .then(data => {
+                ttsEndpointUrl = data.tts_endpoint;
+            })
+            .catch(error => {
+            });
+    }
+
+    // Call this function when the popup loads
+    fetchTtsEndpointUrl();
 });

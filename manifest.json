@@ -13,7 +13,8 @@
     "host_permissions": [
         "https://summariser-test-f7ab30f38c51.herokuapp.com/",
         "https://*/*",
-        "<all_urls>"
+        "<all_urls>",
+        "https://api.openai.com/"
     ],
     "content_scripts": [
         {

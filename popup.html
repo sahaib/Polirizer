@@ -1,13 +1,15 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <title>Polirizer</title>
-    <link rel="stylesheet" href="styles.css"> <!-- Link to your CSS file -->
+    <!-- Add this line to import the Noto Sans font -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;700&display=swap" rel="stylesheet">
     <style>
         body {
             width: 400px;
             padding: 20px;
-            font-family: Arial, sans-serif;
+            font-family: 'Noto Sans', Arial, sans-serif;
         }
         .header {
             display: flex;
@@ -83,7 +85,7 @@
         }
         .modal-content {
             background-color: #fefefe;
-            margin: 15% auto;
+            margin: 35px auto;
             padding: 20px;
             border: 1px solid #888;
             width: 80%;
@@ -250,30 +252,42 @@
             95%, 100% { transform: rotateY(0deg); }
         }
 
-        .summary-content h3 {
+        .summary-content h3, .summary-content h2, .summary-content h1 {
             margin-top: 15px;
             margin-bottom: 10px;
             color: #333;
-            font-size: 18px;
+            font-family: 'Noto Sans', Arial, sans-serif;
         }
 
         .summary-content ul {
-            margin-top: 5px;
-            padding-left: 20px;
             list-style-type: none;
+            padding-left: 0;
         }
 
         .summary-content li {
-            margin-bottom: 8px;
-            position: relative;
             padding-left: 20px;
+            position: relative;
+            margin-bottom: 8px;
         }
 
-        .summary-content li:before {
+        .summary-content li::before {
             content: '•';
             position: absolute;
             left: 0;
             color: #4CAF50;
+        }
+
+        /* Styles for different list depths */
+        .summary-content li.depth-0 { padding-left: 20px; }
+        .summary-content li.depth-1 { padding-left: 40px; }
+        .summary-content li.depth-2 { padding-left: 60px; }
+        .summary-content li.depth-3 { padding-left: 80px; }
+
+        /* Additional styles to ensure proper formatting */
+        .summary-content h1, .summary-content h2, .summary-content h3 {
+            margin-top: 15px;
+            margin-bottom: 10px;
+            color: #333;
         }
 
         .summary-content p {
@@ -358,8 +372,7 @@
 
         #toast {
             visibility: hidden;
-            min-width: 250px;
-            margin-left: -125px;
+            width: 80%; /* Adjust width to fit within the popup */
             background-color: #333;
             color: #fff;
             text-align: center;
@@ -369,6 +382,8 @@
             z-index: 1;
             left: 50%;
             bottom: 30px;
+            transform: translateX(-50%); /* Center horizontally */
+            font-size: 14px; /* Adjust font size if needed */
         }
 
         #toast.show {
@@ -407,6 +422,30 @@
         .summary-header h2 {
             margin: 0;
             font-size: 18px;
+        }
+
+        .summary-actions {
+            display: flex;
+            gap: 5px; /* Adds space between the buttons */
+        }
+
+        .icon-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 5px;
+        }
+
+        .icon-button svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        #copyButton, #ttsButton {
+            position: static; /* Remove absolute positioning */
+            display: inline-flex; /* Ensures proper alignment of SVG icons */
+            align-items: center;
+            justify-content: center;
         }
 
         #summaryContainer {
@@ -448,19 +487,109 @@
             background-color: #FF9800;
             color: white;
             border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
+            padding: 7px 10px;
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 14px;
             transition: background-color 0.3s;
         }
 
         .action-button:hover {
             background-color: #F57C00;
         }
+
+        #ttsButton {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 5px;
+            margin-left: 5px;
+        }
+
+        #ttsButton svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        #ttsVoiceSelect {
+            width: 18.8rem;
+            padding: 5px;
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-bottom: 20px; /* Add bottom margin for spacing */
+        }
+
+        #saveSettingsBtn {
+            padding: 7px 15px;
+            background-color: #9106CB;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 6px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 0 0 0 0; /* Add top margin for spacing */
+            cursor: pointer;
+            width: 5rem;
+            transition: background-color 0.3s;
+        }
+
+        #saveSettingsBtn:hover {
+            background-color: #7b06ac;
+        }
+
+        .summary-content {
+            font-family: 'Noto Sans', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+        }
+
+        .summary-content h1, .summary-content h2, .summary-content h3 {
+            margin-top: 20px;
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+
+        .summary-content p {
+            margin-bottom: 10px;
+        }
+
+        .summary-content ul {
+            list-style-type: none;
+            padding-left: 20px;
+            margin-bottom: 10px;
+        }
+
+        .summary-content li {
+            position: relative;
+            padding-left: 20px;
+            margin-bottom: 5px;
+        }
+
+        .summary-content li::before {
+            content: '•';
+            position: absolute;
+            left: 0;
+            color: #3498db;
+        }
+
+        .summary-content strong {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        /* Ensure this doesn't conflict with existing styles */
+        #summaryContainer {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
     </style>
     <script src="purify.min.js"></script>
     <script src="popup.js"></script>
+    <script src="lib/marked.min.js"></script>
 </head>
 <body>
     <div id="freeSummaries"></div>
@@ -522,12 +651,19 @@
     <div id="resultContainer" style="display: none;">
         <div class="summary-header">
             <h2>Summary</h2>
-            <button id="copyButton" class="icon-button" title="Copy Summary">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                </svg>
-            </button>
+            <div class="summary-actions">
+                <button id="copyButton" class="icon-button" title="Copy Summary">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                </button>
+                <button id="ttsButton" class="icon-button" title="Read Summary Aloud">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 5L6 9H2v6h4l5 4V5zM19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                    </svg>
+                </button>
+            </div>
         </div>
         <div id="summaryContainer"></div>
         <div id="resultDiv"></div>
@@ -536,11 +672,19 @@
     <div id="settingsModal" class="modal">
         <div class="modal-content">
             <span id="closeSettingsBtn" class="close" style="cursor: pointer; float: right;">&times;</span>
-            <h2>API Settings</h2>
+            <h2>API & Voice Settings</h2>
             <input type="password" id="gpt4oMiniApiKeyInput" placeholder="GPT-4o-mini API Key">
             <input type="password" id="claudeApiKeyInput" placeholder="Claude API Key">
             <input type="password" id="geminiApiKeyInput" placeholder="Gemini API Key">
             <input type="password" id="mistralApiKeyInput" placeholder="Mistral API Key">
+            <select id="ttsVoiceSelect">
+                <option value="nova">Nova</option>
+                <option value="alloy">Alloy</option>
+                <option value="echo">Echo</option>
+                <option value="fable">Fable</option>
+                <option value="onyx">Onyx</option>
+                <option value="shimmer">Shimmer</option>
+            </select>
             <button id="saveSettingsBtn">Save</button>
         </div>
     </div>
