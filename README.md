@@ -54,5 +54,5 @@ Polirizer is for informational purposes only. Always read the full privacy polic
 
 ![Main App](MainApp.png)
 ![Summaries](Summaries.png)
-![Ai Models](AI Models.png)
+![Ai Models](AI%Models.png)
 ![Settings](Settings.png)
