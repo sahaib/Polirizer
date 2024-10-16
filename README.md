@@ -52,4 +52,4 @@ Polirizer is for informational purposes only. Always read the full privacy polic
 
 ## App Preview
 
-!(MainApp.png)
+![Main App](MainApp.png)
