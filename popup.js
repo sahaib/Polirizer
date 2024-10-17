@@ -191,8 +191,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Modify the event listener for the summarize button (around line 179)
     if (summarizeBtn) {
         summarizeBtn.addEventListener('click', debounce(async function() {
-            if (summarizeBtn.disabled) return;
-            
             const input = inputText.value.trim();
             const model = modelSelect.value;
 
@@ -237,31 +235,56 @@ document.addEventListener('DOMContentLoaded', function() {
             showLoader();
 
             try {
-                const apiKey = await getApiKey(`${model}ApiKey`);
-                if (!apiKey) {
-                    throw new Error('API key not found');
+                const freeSummariesLeft = await getFreeSummariesCount();
+                let apiKey = null;
+
+                if (freeSummariesLeft > 0) {
+                    // Use server-side API key
+                    apiKey = 'server_side';
+                } else {
+                    // Use client-side API key
+                    apiKey = await getApiKey(`${model}ApiKey`);
+                    if (!apiKey) {
+                        throw new Error('No free summaries left and no valid API key provided');
+                    }
                 }
 
-                let textToSummarize = input;
-                if (urlMatches && urlMatches.length === 1) {
-                    textToSummarize = await fetchUrlContent(inputText.value);
+                const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/summarize', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        input: input,
+                        model: model,
+                        api_key: apiKey,
+                        user_id: await getUserId()
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
 
-                const summary = await sendSummarizeRequest(textToSummarize, model, apiKey);
-                displaySummary(summary, model);
-                lastInput = input;
-                lastModel = model;
+                const result = await response.json();
+
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+
+                displaySummary(result.summary);
+                updateFreeSummariesDisplay(result.free_summaries_left);
             } catch (error) {
-                if (error.message === 'API key not found') {
+                if (error.message.includes('No free summaries left')) {
                     displayError('You have used all your free summaries. Enter your API key(s) to continue.');
                 } else {
-                    displayError(error.message);
+                    displayError(`Failed to summarize: ${error.message}`);
                 }
             } finally {
-                hideLoader();
                 summarizeBtn.disabled = false;
+                hideLoader();
             }
-        }, 300)); // 300ms debounce time
+        }, 300));
     }
 
     async function scrapeWebsite(url) {
@@ -300,6 +323,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
             return data.free_summaries_left !== undefined ? data.free_summaries_left : 0;
         } catch (error) {
+            console.error('Error fetching free summaries count:', error);
             return 0;
         }
     }
@@ -627,7 +651,7 @@ document.addEventListener('DOMContentLoaded', function() {
         let standardizedResponse = response;
 
         // Remove introductory text
-        standardizedResponse = standardizedResponse.replace(/^Here's a summary of the privacy policy.*?:\s*/i, '');
+        tandardizedResponse = standardizedResponse.replace(/^(Here's a summary of the privacy policy.*?:?\s*)?(based on the requested categories:\s*)?/i, '');
 
         // Remove concluding phrases
         standardizedResponse = standardizedResponse.replace(/\s*(Let me know if|If you have any|Please let me know|Is there anything else).*?$/i, '');
@@ -704,22 +728,22 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Update the ttsVoiceSelect options to match GPT TTS voices
-    const ttsVoiceOptions = [
-        { value: 'alloy', text: 'Alloy' },
-        { value: 'echo', text: 'Echo' },
-        { value: 'fable', text: 'Fable' },
-        { value: 'onyx', text: 'Onyx' },
-        { value: 'nova', text: 'Nova' },
-        { value: 'shimmer', text: 'Shimmer' }
-    ];
+    // const ttsVoiceOptions = [
+    //     { value: 'alloy', text: 'Alloy' },
+    //     { value: 'echo', text: 'Echo' },
+    //     { value: 'fable', text: 'Fable' },
+    //     { value: 'onyx', text: 'Onyx' },
+    //     { value: 'nova', text: 'Nova' },
+    //     { value: 'shimmer', text: 'Shimmer' }
+    // ];
 
-    // Populate the ttsVoiceSelect dropdown
-    ttsVoiceOptions.forEach(option => {
-        const optionElement = document.createElement('option');
-        optionElement.value = option.value;
-        optionElement.textContent = option.text;
-        ttsVoiceSelect.appendChild(optionElement);
-    });
+    // // Populate the ttsVoiceSelect dropdown
+    // ttsVoiceOptions.forEach(option => {
+    //     const optionElement = document.createElement('option');
+    //     optionElement.value = option.value;
+    //     optionElement.textContent = option.text;
+    //     ttsVoiceSelect.appendChild(optionElement);
+    // });
 
     // Update the preloadAudio function to handle GPT TTS response
     function preloadAudio(text, voice, callback) {
