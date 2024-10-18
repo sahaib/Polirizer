@@ -52,7 +52,6 @@ Polirizer is for informational purposes only. Always read the full privacy polic
 
 ## App Preview
 
-![promo-2](https://github.com/user-attachments/assets/e59a1e98-87f3-43df-830d-af7046227a72)
 ![Main App](MainApp.png)
 ![Summaries](Summaries-new.png)
 ![TTS](TTS.png)
