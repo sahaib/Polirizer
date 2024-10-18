@@ -727,23 +727,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return standardizedResponse;
     }
 
-    // Update the ttsVoiceSelect options to match GPT TTS voices
-    // const ttsVoiceOptions = [
-    //     { value: 'alloy', text: 'Alloy' },
-    //     { value: 'echo', text: 'Echo' },
-    //     { value: 'fable', text: 'Fable' },
-    //     { value: 'onyx', text: 'Onyx' },
-    //     { value: 'nova', text: 'Nova' },
-    //     { value: 'shimmer', text: 'Shimmer' }
-    // ];
-
-    // // Populate the ttsVoiceSelect dropdown
-    // ttsVoiceOptions.forEach(option => {
-    //     const optionElement = document.createElement('option');
-    //     optionElement.value = option.value;
-    //     optionElement.textContent = option.text;
-    //     ttsVoiceSelect.appendChild(optionElement);
-    // });
 
     // Update the preloadAudio function to handle GPT TTS response
     function preloadAudio(text, voice, callback) {
