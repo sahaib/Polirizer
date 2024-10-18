@@ -53,6 +53,6 @@ Polirizer is for informational purposes only. Always read the full privacy polic
 ## App Preview
 
 ![Main App](MainApp.png)
-![Summaries](Summaries.png)
 ![Ai Models](AI_Models.png)
+![TTS](TTS.png)
 ![Settings](Settings.png)
