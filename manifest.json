@@ -1,24 +1,20 @@
 {
     "manifest_version": 3,
     "name": "Polirizer",
-    "version": "2.1.4",
+    "version": "2.5.1",
     "description": "Summarize privacy policies using AI",
     "permissions": [
         "storage"
     ],
-    "content_security_policy": {
-        "extension_pages": "script-src 'self'; object-src 'self'"
-    },
     "host_permissions": [
         "https://summariser-test-f7ab30f38c51.herokuapp.com/",
         "https://*/*",
-        "<all_urls>",
         "https://api.openai.com/"
     ],
     "content_scripts": [
         {
             "matches": ["<all_urls>"],
-            "js": ["purify.min.js", "popup.js"]
+            "js": ["purify.min.js"]
         }
     ],
     "background": {
@@ -42,7 +38,7 @@
     },
     "web_accessible_resources": [
         {
-            "resources": ["node_modules/ldrs/dist/*", "loader-setup.js"],
+            "resources": ["config.js"],
             "matches": ["<all_urls>"]
         }
     ]

@@ -120,13 +120,22 @@ document.addEventListener('DOMContentLoaded', function() {
     async function getUserId() {
         return new Promise((resolve) => {
             chrome.storage.local.get(['userId'], function(result) {
-                let userId = result.userId;
-                if (!userId) {
-                    userId = 'user_' + Math.random().toString(36).substr(2, 9);
-                    chrome.storage.local.set({userId: userId});
+                if (result.userId) {
+                    resolve(result.userId);
+                } else {
+                    const newUserId = generateUUID();
+                    chrome.storage.local.set({userId: newUserId}, function() {
+                        resolve(newUserId);
+                    });
                 }
-                resolve(userId);
             });
+        });
+    }
+
+    function generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
         });
     }
 
@@ -508,22 +517,31 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add this function to fetch the free summaries count
     async function fetchFreeSummariesCount() {
         try {
+            const userId = await getUserId();
+            console.log('Fetching free summaries count for user:', userId);
             const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/get_free_summaries_count', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    user_id: await getUserId()
+                    user_id: userId
                 })
             });
             const data = await response.json();
+            console.log('Received data from server:', data);
             if (data.free_summaries_left !== undefined) {
                 updateFreeSummariesDisplay(data.free_summaries_left);
+                if (data.new_user) {
+                    showToast("Welcome! You've been granted 10 free summaries.");
+                    console.log('New user detected, granted 10 free summaries');
+                }
             } else {
+                console.log('Free summaries count not found in response');
                 updateFreeSummariesDisplay(0);
             }
         } catch (error) {
+            console.error('Error fetching free summaries count:', error);
             updateFreeSummariesDisplay(0);
         }
     }
@@ -727,24 +745,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return standardizedResponse;
     }
 
-    // Update the ttsVoiceSelect options to match GPT TTS voices
-    // const ttsVoiceOptions = [
-    //     { value: 'alloy', text: 'Alloy' },
-    //     { value: 'echo', text: 'Echo' },
-    //     { value: 'fable', text: 'Fable' },
-    //     { value: 'onyx', text: 'Onyx' },
-    //     { value: 'nova', text: 'Nova' },
-    //     { value: 'shimmer', text: 'Shimmer' }
-    // ];
-
-    // // Populate the ttsVoiceSelect dropdown
-    // ttsVoiceOptions.forEach(option => {
-    //     const optionElement = document.createElement('option');
-    //     optionElement.value = option.value;
-    //     optionElement.textContent = option.text;
-    //     ttsVoiceSelect.appendChild(optionElement);
-    // });
-
     // Update the preloadAudio function to handle GPT TTS response
     function preloadAudio(text, voice, callback) {
         isPreloading = true;
@@ -829,4 +829,122 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Call this function when the popup loads
     fetchTtsEndpointUrl();
+
+    // Modify the summarize function to include the new user activity data
+    async function summarize() {
+        const inputText = document.getElementById('inputText').value;
+        const model = document.getElementById('modelSelect').value;
+        const userId = await getUserId();
+        const startTime = Date.now();
+
+        if (!inputText) {
+            showError('Please enter a URL or paste the privacy policy text.');
+            return;
+        }
+
+        showLoader();
+
+        try {
+            const apiKey = await getApiKey(model);
+            if (!apiKey) {
+                throw new Error('API key not found for the selected model.');
+            }
+
+            const searchedFor = inputText.startsWith('http://') || inputText.startsWith('https://') ? 'link' : 'plain_text';
+            let scrapedData = null;
+
+            if (searchedFor === 'link') {
+                scrapedData = await scrapeWebsite(inputText);
+            }
+
+            const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/summarize', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    input: inputText,
+                    model: model,
+                    api_key: apiKey,
+                    user_id: userId,
+                    searched_for: searchedFor,
+                    scrape_data: scrapedData
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const requestTime = (Date.now() - startTime) / 1000; // Convert to seconds
+
+            // Send user activity data to the server
+            await sendUserActivity(userId, model, searchedFor, inputText, scrapedData, requestTime);
+
+            displayResult(data);
+            updateFreeSummariesCount(data.free_summaries_left);
+        } catch (error) {
+            showError(`An error occurred: ${error.message}`);
+        } finally {
+            hideLoader();
+        }
+    }
+
+    async function sendUserActivity(userId, modelSelected, searchedFor, searchedData, scrapeData, requestTime) {
+        try {
+            const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/user_activity', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    user_id: userId,
+                    model_selected: modelSelected,
+                    searched_for: searchedFor,
+                    searched_data: searchedData,
+                    scrape_data: scrapeData,
+                    request_time: requestTime
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log('User activity recorded successfully:', result);
+        } catch (error) {
+            console.error('Error sending user activity:', error);
+        }
+    }
+
+    // Make sure to call the summarize function when the summarize button is clicked
+    document.getElementById('summarizeBtn').addEventListener('click', summarize);
+
+    async function displayUserInfo() {
+        try {
+            const userId = await getUserId();
+            const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/get_user_info', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ user_id: userId })
+            });
+            const data = await response.json();
+            if (data.created_at) {
+                const createdDate = new Date(data.created_at).toLocaleDateString();
+                const userInfoElement = document.getElementById('userInfo');
+                if (userInfoElement) {
+                    userInfoElement.textContent = `Account created on: ${createdDate}`;
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching user info:', error);
+        }
+    }
+
+    // Call this function when the popup opens
+    displayUserInfo();
 });
