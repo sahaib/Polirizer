@@ -1,54 +1,61 @@
-Privacy Policy for Polirizer
+# Privacy Policy for Polirizer
 
-Last updated: [15-Oct-2024]
+Last updated: [Current Date]
 
-1. Introduction
+## 1. Introduction
 
-Polirizer ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your information when you use our Chrome extension, Polirizer.
+Polirizer ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your information when you use our privacy policy summarization service.
 
-2. Information We Collect
+## 2. Information We Collect
 
-a. User-Provided Information:
-   - API keys for AI services (if you choose to use your own)
-   - Privacy policy text or URLs you submit for summarization
+🔹 User Identifier: We generate and store a unique identifier for each user. This identifier is not linked to any personal information.
 
-b. Automatically Collected Information:
-   - A randomly generated user ID
-   - Number of summaries requested
-   - Selected AI model for summarization
+🔹 Usage Data: We collect information about how you use our service, including:
+  - The AI model selected for summarization
+  - Whether you input a URL or plain text
+  - The time taken to process your request
+  - The number of summaries you've requested
 
-c. Website Content:
-   - Text of privacy policies from websites you choose to summarize
+🔹 Input Data: We temporarily process the text or URL you provide for summarization.
 
-3. How We Use Your Information
+## 3. How We Use Your Information
 
-We use the collected information to:
-   - Provide and improve our summarization service
-   - Track usage of free summaries
-   - Ensure proper functionality of the extension
+We use the collected information for the following purposes:
 
-4. Data Storage and Security
+🔹 To provide and maintain our service
+🔹 To improve and optimize our service
+🔹 To monitor and analyze usage patterns and trends
+🔹 To manage your account and provide customer support
+🔹 To enforce our terms, conditions, and policies
 
-- All data is stored locally on your device using Chrome's storage API
-- API keys are encrypted and securely transmitted to our server only when processing a summary
-- We do not retain the text of privacy policies or summaries after processing
+## 4. Data Storage and Security
 
-5. Third-Party Services
+🔹 Encryption: We encrypt sensitive data, such as the content you submit for summarization, to enhance security.
 
-We use external AI services for summarization. When you use our extension:
-   - The privacy policy text is sent to our server and then to the selected AI service
-   - No personally identifiable information is shared with these services
+🔹 Data Retention: We retain usage data for a limited time to improve our service. Input data is not stored after processing.
 
-6. Your Rights
+🔹 Security Measures: We implement industry-standard security measures to protect against unauthorized access, alteration, disclosure, or destruction of your information.
 
-You can:
-   - Delete your locally stored data by uninstalling the extension
-   - Choose not to provide personal API keys
+## 5. Sharing of Information
 
-7. Changes to This Policy
+We do not sell, trade, or rent your information to third parties. We may share aggregated, non-personal information for business or research purposes.
 
-We may update this policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page.
+## 6. Your Rights
 
-8. Contact Us
+You have the right to:
 
-If you have any questions about this Privacy Policy, please contact us at [hello@sahaibsingh.com].
+🔹 Access the data we hold about you
+🔹 Request deletion of your data
+🔹 Object to our use of your data
+
+To exercise these rights, please contact us using the information provided below.
+
+## 7. Changes to This Privacy Policy
+
+We may update our Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the "Last updated" date.
+
+## 8. Contact Us
+
+If you have any questions about this Privacy Policy, please contact us at:
+
+[Your Contact Information]
