@@ -1,6 +1,6 @@
 # Privacy Policy for Polirizer
 
-Last updated: [Current Date]
+Last updated: [19-Oct-2024]
 
 ## 1. Introduction
 
@@ -58,4 +58,4 @@ We may update our Privacy Policy from time to time. We will notify you of any ch
 
 If you have any questions about this Privacy Policy, please contact us at:
 
-[Your Contact Information]
+[hello@sahaibsingh.com]
