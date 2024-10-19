@@ -1,54 +1,79 @@
-# Polirizer
+# Polirizer Chrome Extension
 
-Polirizer is a Chrome extension that summarizes privacy policies using AI technology. It provides quick, easy-to-understand summaries of complex privacy policies, helping users make informed decisions about their online privacy.
+## Overview
+
+Polirizer is a Chrome extension that uses AI to summarize privacy policies, making them easier to understand. It supports multiple AI models and offers features like text-to-speech for accessibility.
 
 ## Features
 
 - Summarize privacy policies from URLs or pasted text
-- Support for multiple AI models including GPT-4o-mini, Claude, Gemini, and Mistral
-- Text-to-speech functionality for audio summaries
-- Customizable settings for API keys and voice selection
-- User-friendly interface with copy and audio playback options
+- Support for multiple AI models:
+  - GPT-4o-mini (OpenAI)
+  - Claude-3-5-sonnet (Anthropic)
+  - Gemini-1.5-flash-8b (Google)
+  - Mistral-small-latest (Mistral AI)
+- Text-to-speech functionality
+- Copy summary to clipboard
+- User-friendly interface with emoji indicators
+- 10 free summaries for new users
+- Option to use personal API keys for unlimited summaries
 
 ## Installation
 
-1. Clone this repository or download the ZIP file.
-2. Open Chrome and navigate to `chrome://extensions/`.
-3. Enable "Developer mode" in the top right corner.
-4. Click "Load unpacked" and select the directory containing the extension files.
+1. Clone this repository
+2. Open Chrome and navigate to `chrome://extensions/`
+3. Enable "Developer mode" in the top right
+4. Click "Load unpacked" and select the cloned repository folder
 
 ## Usage
 
-1. Click on the Polirizer icon in your Chrome toolbar.
-2. Enter a URL of a privacy policy or paste the policy text directly.
-3. Select the AI model you want to use for summarization.
-4. Click "Summarize" to generate a summary.
-5. Use the copy button to copy the summary or the audio button to listen to it.
-
-## Configuration
-
-- API Keys: Enter your API keys for different AI models in the settings menu.
-- Voice Selection: Choose your preferred voice for text-to-speech in the settings.
+1. Click the Polirizer icon in your Chrome toolbar
+2. Enter a URL or paste text of a privacy policy
+3. Select an AI model
+4. Click "Summarize"
+5. View the structured summary with key points
 
 ## Development
 
-To set up the development environment:
+### Prerequisites
 
-1. Clone the repository: `git clone https://github.com/yourusername/polirizer.git`
-2. Navigate to the project directory: `cd polirizer`
-3. Install dependencies (if any): `npm install`
+- Node.js and npm
 
-## Contributing
+### Setup
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+1. Install dependencies:
+   ```
+   npm install
+   ```
+
+2. Build the extension:
+   ```
+   npm run build
+   ```
+
+### File Structure
+
+- `popup.html`: Main extension popup and for Styling popup
+- `popup.js`: Core functionality
+- `manifest.json`: Extension configuration
+
+### API Integration
+
+The extension communicates with a backend server for AI processing. Ensure the correct API endpoint is set in `popup.js`.
+
+## Privacy and Security
+
+- No personal user data is stored
+- All processed data is encrypted in transit
+- User preferences and API keys are stored locally and encrypted
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Disclaimer
+## Support
 
-Polirizer is for informational purposes only. Always read the full privacy policy for complete information.
+For issues or feature requests, please open an issue on this repository.
 
 ## App Preview
 
