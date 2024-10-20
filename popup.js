@@ -11,6 +11,50 @@ function debounce(func, wait) {
     };
 }
 
+// ... rest of your existing code ...
+
+function displayError(errorMessage) {
+    const resultContainer = document.getElementById('resultContainer');
+    const summaryContainer = document.getElementById('summaryContainer');
+    const resultDiv = document.getElementById('resultDiv');
+    const copyButton = document.getElementById('copyButton');
+    const summaryHeader = document.querySelector('.summary-header');
+    
+    // Hide summary-related elements
+    if (summaryContainer) summaryContainer.style.display = 'none';
+    if (copyButton) copyButton.style.display = 'none';
+    if (summaryHeader) summaryHeader.style.display = 'none';
+    
+    // Clear previous content
+    if (resultDiv) resultDiv.innerHTML = '';
+    
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'error-message user-friendly';
+    errorDiv.innerHTML = `
+        <h3>Oops!</h3>
+        <p>${errorMessage}</p>
+    `;
+    
+    if (resultDiv) resultDiv.appendChild(errorDiv);
+    if (resultContainer) resultContainer.style.display = 'block';
+
+    // Only add the "Open Settings" button if it's the API key error
+    if (errorMessage.includes('Enter your API key')) {
+        const openSettingsBtn = document.createElement('button');
+        openSettingsBtn.id = 'openSettingsBtn';
+        openSettingsBtn.className = 'action-button';
+        openSettingsBtn.textContent = 'Open Settings';
+        openSettingsBtn.addEventListener('click', function() {
+            const settingsModal = document.getElementById('settingsModal');
+            if (settingsModal) {
+                settingsModal.style.display = 'block';
+                loadApiKeysIntoSettingsForm();
+            }
+        });
+        errorDiv.appendChild(openSettingsBtn);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const inputText = document.getElementById('inputText');
     const modelSelect = document.getElementById('modelSelect');
@@ -24,12 +68,29 @@ document.addEventListener('DOMContentLoaded', function() {
     const copyButton = document.getElementById('copyButton');
     const ttsButton = document.getElementById('ttsButton');
     const ttsVoiceSelect = document.getElementById('ttsVoiceSelect');
+    const exportButton = document.getElementById('exportButton');
     let lastInput = '';
     let lastModel = '';
     let currentAudio = null;
     let preloadedAudio = null;
     let isPreloading = false;
     let ttsEndpointUrl = 'https://summariser-test-f7ab30f38c51.herokuapp.com/tts'; // Default URL
+    let currentActivityId = null;
+    let activityData = {};
+    let lastActivityType = null;
+    let lastActivityTime = 0;
+    let currentSessionId = null;
+    
+    fetchTtsEndpointUrl();
+
+// Update the export button event listener
+if (exportButton) {
+    exportButton.addEventListener('click', debounce(function() {
+        exportSummary();
+        updateActivity('summary_exported');
+    }, 300)); // 300ms debounce time
+}
+
 
     function showToast(message) {
         let toast = document.getElementById('toast');
@@ -54,6 +115,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
         });
+    }
+
+    function openSettingsModal() {
+        const settingsModal = document.getElementById('settingsModal');
+        if (settingsModal) {
+            settingsModal.style.display = 'block';
+            loadApiKeysIntoSettingsForm();
+        }
     }
 
     async function fetchUrlContent(url) {
@@ -119,19 +188,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function getUserId() {
         return new Promise((resolve) => {
-            chrome.storage.local.get(['userId'], function(result) {
-                if (result.userId) {
-                    resolve(result.userId);
+            chrome.storage.local.get(['user_id'], function(result) {
+                if (result.user_id) {
+                    resolve(result.user_id);
                 } else {
                     const newUserId = generateUUID();
-                    chrome.storage.local.set({userId: newUserId}, function() {
+                    chrome.storage.local.set({ user_id: newUserId }, function() {
                         resolve(newUserId);
                     });
                 }
             });
         });
     }
-
+    
     function generateUUID() {
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
             var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
@@ -197,138 +266,217 @@ document.addEventListener('DOMContentLoaded', function() {
         return true;
     }
 
-    // Modify the event listener for the summarize button (around line 179)
     if (summarizeBtn) {
-        summarizeBtn.addEventListener('click', debounce(async function() {
-            const input = inputText.value.trim();
-            const model = modelSelect.value;
+        summarizeBtn.addEventListener('click', async function(event) {
+            event.preventDefault();
+            if (await checkApiKeyAndOpenSettings()) {
+                debounce(summarize, 300)();
+            }
+        });
+    }
 
-            if (!input) {
-                displayError('Please enter a URL or paste privacy policy text.');
+    async function summarize() {
+        try {
+            if (!(await checkApiKeyAndOpenSettings())) {
+            return;
+        }
+            const inputText = document.getElementById('inputText').value.trim();
+            const model = document.getElementById('modelSelect').value;
+            const userId = await getUserId();
+            let token = await getValidToken(); // Changed from const to let
+            const startTime = Date.now();
+    
+            if (!inputText) {
+                displayError('Please enter some text or a URL to summarize.');
                 return;
             }
-
-            // Add this near the beginning of the click event listener, after getting the input
-            const maxInputLength = 50000; // Adjust this value as needed
-            if (input.length > maxInputLength) {
+    
+            const maxInputLength = 50000;
+            if (inputText.length > maxInputLength) {
                 displayError(`Input is too long. Please limit your input to ${maxInputLength} characters.`);
                 return;
             }
-
-            // Replace lines 190-192 with this improved URL detection logic
+    
             const urlRegex = /https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)/gi;
-            const urlMatches = input.match(urlRegex);
-
+            const urlMatches = inputText.match(urlRegex);
+    
             if (urlMatches && urlMatches.length > 1) {
                 displayError('Please enter only one URL or paste the privacy policy text directly. Multiple URLs are not supported.');
                 return;
             }
-
+    
+            showLoader();
+            let isUrl = false;
+            let scrapedContent = null;
+    
             if (urlMatches && urlMatches.length === 1) {
-                // Single URL detected
-                let url = urlMatches[0];
-                inputText.value = url; // Update the input field with the detected URL
-            } else if (urlMatches && urlMatches.length === 0) {
-                // No URL detected, check if the input contains "http" or "https"
-                if (input.includes('http://') || input.includes('https://')) {
-                    displayError('Invalid URL format. Please enter a valid URL or paste the privacy policy text directly.');
+                isUrl = true;
+                const url = urlMatches[0];
+                try {
+                    scrapedContent = await scrapeWebsite(url);
+                } catch (error) {
+                    displayError(`Failed to scrape website: ${error.message}`);
                     return;
                 }
+            } else if (inputText.includes('http://') || inputText.includes('https://')) {
+                displayError('Invalid URL format. Please enter a valid URL or paste the privacy policy text directly.');
+                return;
             }
-
-            if (!isInputValid(input)) {
+    
+            if (!isInputValid(inputText)) {
                 return; // The error message is already displayed by isInputValid
             }
-
-            summarizeBtn.disabled = true;
-            showLoader();
-
-            try {
-                const freeSummariesLeft = await getFreeSummariesCount();
-                let apiKey = null;
-
-                if (freeSummariesLeft > 0) {
-                    // Use server-side API key
-                    apiKey = 'server_side';
-                } else {
-                    // Use client-side API key
-                    apiKey = await getApiKey(`${model}ApiKey`);
-                    if (!apiKey) {
-                        throw new Error('No free summaries left and no valid API key provided');
-                    }
-                }
-
-                const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/summarize', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        input: input,
-                        model: model,
-                        api_key: apiKey,
-                        user_id: await getUserId()
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const result = await response.json();
-
-                if (result.error) {
-                    throw new Error(result.error);
-                }
-
-                displaySummary(result.summary);
-                updateFreeSummariesDisplay(result.free_summaries_left);
-            } catch (error) {
-                if (error.message.includes('No free summaries left')) {
-                    displayError('You have used all your free summaries. Enter your API key(s) to continue.');
-                } else {
-                    displayError(`Failed to summarize: ${error.message}`);
-                }
-            } finally {
-                summarizeBtn.disabled = false;
-                hideLoader();
+    
+            const freeSummariesLeft = await getFreeSummariesCount();
+            let apiKey = await getApiKey(`${model}ApiKey`);
+    
+            if (freeSummariesLeft <= 0 && !apiKey) {
+                throw new Error('No free summaries left and no valid API key provided');
             }
-        }, 300));
+    
+            const useServerSideKey = freeSummariesLeft > 0;
+    
+            const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/summarize', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    input: inputText,
+                    model: model,
+                    user_id: userId,
+                    is_url: isUrl,
+                    searched_data: inputText,
+                    scrape_data: scrapedContent,
+                    api_key: useServerSideKey ? 'server_side' : apiKey
+                })
+            });
+    
+            if (response.status === 403) {
+                const errorData = await response.json();
+                if (errorData.error === "No free summaries left") {
+                    throw new Error('No free summaries left');
+                } else {
+                    console.log('Received 403 error, attempting to refresh token');
+                    token = await requestNewToken();
+                    if (!token) {
+                        throw new Error('Failed to refresh authentication token');
+                    }
+                    // Retry the request with the new token
+                    return await summarize();
+                }
+            }
+    
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+            }
+    
+            const result = await response.json();
+    
+            if (result.error) {
+                throw new Error(result.error);
+            }
+    
+            displaySummary(result.summary, model);
+            updateFreeSummariesDisplay(result.free_summaries_left);
+            currentSessionId = result.session_id;  // Store the session_id
+    
+            // Start a new session here
+            startNewSession({
+                model: model,
+                isUrl: isUrl,
+                input: inputText,
+                scrapeData: scrapedContent
+            });
+            
+            const activityData = {
+                model_selected: model,
+                searched_for: isUrl ? 'url' : 'text',
+                searched_data: inputText,
+                scrape_data: scrapedContent,
+                request_time: (Date.now() - startTime) / 1000, // Convert to seconds
+                tts_used: false,
+                copied_summary: false,
+                summary_exported: false
+            };
+            // Reset activity flags
+            lastActivityType = null;
+            lastActivityTime = 0;
+            await sendUserActivity(activityData);
+    
+        } catch (error) {
+            if (error.message === 'No free summaries left and no valid API key provided') {
+                displayError('You have used all your free summaries. Please enter your API key to continue.');
+                openSettingsModal();
+            } else {
+                displayError(`Failed to summarize: ${error.message}`);
+            }
+        } finally {
+            hideLoader();
+        }
+    }
+    async function checkApiKeyAndOpenSettings() {
+        const model = document.getElementById('modelSelect').value;
+        const freeSummariesLeft = await getFreeSummariesCount();
+        const apiKey = await getApiKey(`${model}ApiKey`);
+    
+        console.log('Model:', model);
+        console.log('Free summaries left:', freeSummariesLeft);
+        console.log('API Key exists:', !!apiKey);
+    
+        if (freeSummariesLeft <= 0 && !apiKey) {
+            displayError('You have used all your free summaries. Please enter your API key to continue.');
+            openSettingsModal();
+            return false;
+        }
+        return true;
     }
 
     async function scrapeWebsite(url) {
         try {
+            const token = await getValidToken();
             const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/scrape', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ url })
+                body: JSON.stringify({ url: url })
             });
-
+    
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-
+    
             const data = await response.json();
             return data.content;
         } catch (error) {
-            throw new Error('Failed to scrape website content. Please try pasting the text directly.');
+            console.error('Error scraping website:', error);
+            throw error;
         }
     }
 
-    // Add this function to get the current free summaries count
     async function getFreeSummariesCount() {
         try {
+            const token = await getValidToken();
             const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/get_free_summaries_count', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({
                     user_id: await getUserId()
                 })
             });
+            if (response.status === 403) {
+                return 0; // No free summaries left
+            }
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
             const data = await response.json();
             return data.free_summaries_left !== undefined ? data.free_summaries_left : 0;
         } catch (error) {
@@ -462,48 +610,6 @@ document.addEventListener('DOMContentLoaded', function() {
         showToast("Preparing audio. It will be available soon.");
         preloadAudioWithCurrentSettings();
     }
-    
-    function displayError(errorMessage) {
-        const resultContainer = document.getElementById('resultContainer');
-        const summaryContainer = document.getElementById('summaryContainer');
-        const resultDiv = document.getElementById('resultDiv');
-        const copyButton = document.getElementById('copyButton');
-        const summaryHeader = document.querySelector('.summary-header');
-        
-        // Hide summary-related elements
-        summaryContainer.style.display = 'none';
-        copyButton.style.display = 'none';
-        summaryHeader.style.display = 'none';
-        
-        // Clear previous content
-        resultDiv.innerHTML = '';
-        
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'error-message user-friendly';
-        errorDiv.innerHTML = `
-            <h3>Oops!</h3>
-            <p>${errorMessage}</p>
-        `;
-        
-        resultDiv.appendChild(errorDiv);
-        resultContainer.style.display = 'block';
-
-        // Only add the "Open Settings" button if it's the API key error
-        if (errorMessage.includes('Enter your API key')) {
-            const openSettingsBtn = document.createElement('button');
-            openSettingsBtn.id = 'openSettingsBtn';
-            openSettingsBtn.className = 'action-button';
-            openSettingsBtn.textContent = 'Open Settings';
-            openSettingsBtn.addEventListener('click', function() {
-                if (settingsModal) {
-                    settingsModal.style.display = 'block';
-                    loadApiKeysIntoSettingsForm();
-                }
-            });
-            errorDiv.appendChild(openSettingsBtn);
-        }
-    }
-
 
     function updateFreeSummariesDisplay(count) {
         const counterElement = document.getElementById('freeSummariesCounter');
@@ -514,30 +620,31 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Add this function to fetch the free summaries count
     async function fetchFreeSummariesCount() {
         try {
             const userId = await getUserId();
-            console.log('Fetching free summaries count for user:', userId);
+            const token = await getValidToken();
+            // console.log('Fetching free summaries count for user:', userId);
             const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/get_free_summaries_count', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({
                     user_id: userId
                 })
             });
             const data = await response.json();
-            console.log('Received data from server:', data);
+            // console.log('Received data from server:', data);
             if (data.free_summaries_left !== undefined) {
                 updateFreeSummariesDisplay(data.free_summaries_left);
                 if (data.new_user) {
                     showToast("Welcome! You've been granted 10 free summaries.");
-                    console.log('New user detected, granted 10 free summaries');
+                    // console.log('New user detected, granted 10 free summaries');
                 }
             } else {
-                console.log('Free summaries count not found in response');
+                // console.log('Free summaries count not found in response');
                 updateFreeSummariesDisplay(0);
             }
         } catch (error) {
@@ -574,16 +681,24 @@ document.addEventListener('DOMContentLoaded', function() {
     // Call this function when the popup is loaded
     updateModelSelectOptions();
 
-    // Move the copyButton event listener inside the DOMContentLoaded event
+    // Add this function to handle the copy button
     if (copyButton) {
-        copyButton.addEventListener('click', function() {
-            const summaryContent = document.getElementById('summaryContainer').innerText;
-            navigator.clipboard.writeText(summaryContent).then(function() {
-                showToast("Summary copied to clipboard!");
-            }).catch(function(err) {
-                showToast("Failed to copy summary. Please try again.");
-            });
-        });
+        copyButton.addEventListener('click', debounce(function() {
+            const summaryContainer = document.getElementById('summaryContainer');
+            if (summaryContainer) {
+                const summaryText = summaryContainer.innerText;
+                navigator.clipboard.writeText(summaryText).then(() => {
+                    showToast("Summary copied to clipboard!");
+                    updateActivity('copied_summary');
+                }).catch(err => {
+                    console.error('Failed to copy summary: ', err);
+                    showToast("Failed to copy summary. Please try again.");
+                });
+            } else {
+                console.error('Summary container not found');
+                showToast("Error: Summary not available");
+            }
+        }, 300)); // 300ms debounce time
     }
 
     // Add this function to load API keys into the settings form
@@ -593,7 +708,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const claudeInput = document.getElementById('claudeApiKeyInput');
             const geminiInput = document.getElementById('geminiApiKeyInput');
             const mistralInput = document.getElementById('mistralApiKeyInput');
-
+    
             if (gpt4oMiniInput) gpt4oMiniInput.value = result['gpt-4o-miniApiKey'] || '';
             if (claudeInput) claudeInput.value = result['claude-3-5-sonnet-20240620ApiKey'] || '';
             if (geminiInput) geminiInput.value = result['gemini-1.5-flash-8bApiKey'] || '';
@@ -690,7 +805,6 @@ document.addEventListener('DOMContentLoaded', function() {
         standardizedResponse = standardizedResponse.replace(/^\*\*(.*?)\*\*$/gm, (match, content) => {
         return `<h3>${content.trim()}</h3>`;
         });
-
         // Handle inline bold text (if any remains after header conversion)
         standardizedResponse = standardizedResponse.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
 
@@ -779,6 +893,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     isPreloading = false;
                     showToast("Audio is ready to play!");
                     if (callback) callback(preloadedAudio);
+                    updateActivity('tts');  // Add this line to track TTS usage
                 };
             } else {
                 throw new Error(`Received non-audio blob: ${blob.type}`);
@@ -791,7 +906,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Update the preloadAudioWithCurrentSettings function
     function preloadAudioWithCurrentSettings() {
         const summaryContainer = document.getElementById('summaryContainer');
         const resultDiv = document.getElementById('resultDiv');
@@ -800,7 +914,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const summaryText = summaryContainer.innerText;
             const disclaimerText = resultDiv.innerText;
             const fullText = summaryText + ' ' + disclaimerText;
-
+    
             chrome.storage.local.get(['ttsVoice'], function(result) {
                 const selectedVoice = result.ttsVoice || 'nova'; // Default to 'nova' if not set
                 preloadAudio(fullText, selectedVoice, (audio) => {
@@ -808,11 +922,38 @@ document.addEventListener('DOMContentLoaded', function() {
                         preloadedAudio = audio;
                         currentAudio = null; // Reset currentAudio when new audio is preloaded
                         showToast("New audio is ready with the updated voice.");
+                        enableTtsButton(); // Always enable the TTS button after preloading
+                        
+                        // Update the TTS button event listener
+                        if (ttsButton) {
+                            ttsButton.addEventListener('click', debounce(function() {
+                                if (preloadedAudio && preloadedAudio.paused) {
+                                    updateActivity('tts_used');
+                                }
+                            }, 300));
+                        }
                     } else {
                         showToast("Failed to prepare audio with the new voice.");
+                        disableTtsButton(); // Disable the button if preloading failsc
                     }
                 });
             });
+        }
+    }
+    
+    
+    // Add these helper functions to manage the TTS button state
+    function enableTtsButton() {
+        const ttsButton = document.getElementById('ttsButton');
+        if (ttsButton) {
+            ttsButton.disabled = false;
+        }
+    }
+    
+    function disableTtsButton() {
+        const ttsButton = document.getElementById('ttsButton');
+        if (ttsButton) {
+            ttsButton.disabled = true;
         }
     }
 
@@ -822,116 +963,106 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 ttsEndpointUrl = data.tts_endpoint;
+                // console.log("TTS endpoint URL:", ttsEndpointUrl);
             })
             .catch(error => {
+                console.error('Error fetching TTS endpoint URL:', error);
+                // Fallback to the default URL if fetching fails
+                ttsEndpointUrl = 'https://summariser-test-f7ab30f38c51.herokuapp.com/tts';
             });
     }
 
-    // Call this function when the popup loads
-    fetchTtsEndpointUrl();
-
-    // Modify the summarize function to include the new user activity data
-    async function summarize() {
-        const inputText = document.getElementById('inputText').value;
-        const model = document.getElementById('modelSelect').value;
-        const userId = await getUserId();
-        const startTime = Date.now();
-
-        if (!inputText) {
-            showError('Please enter a URL or paste the privacy policy text.');
-            return;
-        }
-
-        showLoader();
-
+    
+    async function sendUserActivity(activityType) {
         try {
-            const apiKey = await getApiKey(model);
-            if (!apiKey) {
-                throw new Error('API key not found for the selected model.');
-            }
-
-            const searchedFor = inputText.startsWith('http://') || inputText.startsWith('https://') ? 'link' : 'plain_text';
-            let scrapedData = null;
-
-            if (searchedFor === 'link') {
-                scrapedData = await scrapeWebsite(inputText);
-            }
-
-            const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/summarize', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    input: inputText,
-                    model: model,
-                    api_key: apiKey,
-                    user_id: userId,
-                    searched_for: searchedFor,
-                    scrape_data: scrapedData
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            const requestTime = (Date.now() - startTime) / 1000; // Convert to seconds
-
-            // Send user activity data to the server
-            await sendUserActivity(userId, model, searchedFor, inputText, scrapedData, requestTime);
-
-            displayResult(data);
-            updateFreeSummariesCount(data.free_summaries_left);
-        } catch (error) {
-            showError(`An error occurred: ${error.message}`);
-        } finally {
-            hideLoader();
-        }
-    }
-
-    async function sendUserActivity(userId, modelSelected, searchedFor, searchedData, scrapeData, requestTime) {
-        try {
+            const token = await getValidToken();
+            const inputElement = document.getElementById('inputText');
+            const modelElement = document.getElementById('modelSelect');
+    
+            // Check if the input is a URL
+            const isUrl = /^https?:\/\//i.test(inputElement.value.trim());
+    
+            const activityData = {
+                model_selected: modelElement.value,
+                searched_for: isUrl ? 'url' : 'text',
+                searched_data: inputElement.value,
+                request_time: Date.now() / 1000, // Convert to seconds
+                tts_used: activityType === 'tts_used' ? true : null,
+                copied_summary: activityType === 'copied_summary' ? true : null,
+                summary_exported: activityType === 'summary_exported' ? true : null
+            };
+    
             const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/user_activity', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({
-                    user_id: userId,
-                    model_selected: modelSelected,
-                    searched_for: searchedFor,
-                    searched_data: searchedData,
-                    scrape_data: scrapeData,
-                    request_time: requestTime
-                })
+                body: JSON.stringify(activityData)
             });
-
+    
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const errorData = await response.json();
+                throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || 'Unknown error'}`);
             }
-
-            const result = await response.json();
-            console.log('User activity recorded successfully:', result);
+    
+            // console.log('User activity sent successfully');
         } catch (error) {
             console.error('Error sending user activity:', error);
         }
     }
+    
+    function updateActivity(action) {
+        const now = Date.now();
+        // Prevent multiple entries within 5 seconds for the same action
+        if (action !== lastActivityType || now - lastActivityTime > 5000) {
+            sendUserActivity(action);
+            lastActivityType = action;
+            lastActivityTime = now;
+        }
+    }
+    
+    document.getElementById('copyButton').addEventListener('click', function() {
+        const summaryContainer = document.getElementById('summaryContainer');
+        if (summaryContainer) {
+            const summaryText = summaryContainer.innerText;
+            navigator.clipboard.writeText(summaryText).then(() => {
+                showToast("Summary copied to clipboard!");
+                updateActivity('copied_summary');
+            }).catch(err => {
+                console.error('Failed to copy summary: ', err);
+                showToast("Failed to copy summary. Please try again.");
+            });
+        } else {
+            console.error('Summary container not found');
+            showToast("Error: Summary not available");
+        }
+    });
 
-    // Make sure to call the summarize function when the summarize button is clicked
-    document.getElementById('summarizeBtn').addEventListener('click', summarize);
+    document.getElementById('exportButton').addEventListener('click', function() {
+        exportSummary();
+        updateActivity('summary_exported');
+    });
 
     async function displayUserInfo() {
         try {
             const userId = await getUserId();
+            const token = await getValidToken();  // Changed from getOrCreateToken
+            if (!token) {
+                console.error('Failed to get or create token');
+                return;
+            }
             const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/get_user_info', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({ user_id: userId })
             });
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
             const data = await response.json();
             if (data.created_at) {
                 const createdDate = new Date(data.created_at).toLocaleDateString();
@@ -947,4 +1078,191 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Call this function when the popup opens
     displayUserInfo();
+
+    function exportSummary() {
+        const summaryContainer = document.getElementById('summaryContainer');
+        const summaryText = summaryContainer.innerText;
+        const blob = new Blob([summaryText], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'privacy_policy_summary.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showToast("Summary exported successfully!");
+        updateActivity('export');  // Add this line
+    }
+
+  
+    async function requestNewToken() {
+        const userId = await getUserId();
+        try {
+            const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/get_or_create_token', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ user_id: userId })
+            });
+    
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+    
+            const data = await response.json();
+            const newToken = data.token;
+    
+            // Store the new token
+            chrome.storage.local.set({ auth_token: newToken }, function() {
+                // console.log('New token saved to storage');
+            });
+    
+            return newToken;
+        } catch (error) {
+            console.error('Error requesting new token:', error);
+            return null;
+        }
+    }
+    
+    async function getValidToken() {
+        let token = await new Promise((resolve) => {
+            chrome.storage.local.get(['auth_token'], function(result) {
+                resolve(result.auth_token);
+            });
+        });
+    
+        if (!token) {
+            // console.log('No token found, requesting new token');
+            return await requestNewToken();
+        }
+    
+        // Check if the token is expired
+        try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            const exp = payload.exp;
+            const currentTimestamp = Math.floor(Date.now() / 1000);
+            if (currentTimestamp > exp) {
+                // console.log('Token expired, requesting new token');
+                return await requestNewToken();
+            }
+        } catch (error) {
+            console.error('Error parsing token:', error);
+            return await requestNewToken();
+        }
+    
+        return token;
+    }
+
+    async function testToken() {
+        const token = await getValidToken();
+        try {
+            const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/verify_token', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            const data = await response.json();
+            // console.log("Token verification result:", data);
+        } catch (error) {
+            console.error("Error verifying token:", error);
+        }
+    }
+    
+    function startNewSession(summaryData) {
+        currentSessionId = generateSessionId();
+        sendInitialActivityLog(summaryData);
+    }
+    
+    async function sendInitialActivityLog(summaryData) {
+        const token = await getValidToken();
+        const userId = await getUserId();
+        const activityData = {
+            session_id: currentSessionId,
+            user_id: userId,
+            model_selected: summaryData.model,
+            searched_for: summaryData.isUrl ? 'url' : 'text',
+            searched_data: summaryData.input,
+            scrape_data: summaryData.scrapeData || null,
+            request_time: Date.now() / 1000, // Convert to seconds
+            tts_used: false,
+            copied_summary: false,
+            summary_exported: false
+        };
+        
+        try {
+            const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/user_activity', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(activityData)
+            });
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+        } catch (error) {
+            console.error('Error sending initial activity log:', error);
+        }
+    }
+
+    function generateSessionId() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
+    async function updateActivity(action) {
+        if (!currentSessionId) {
+            console.error('No active session');
+            return;
+        }
+        
+        const token = await getValidToken();
+        const activityData = {
+            session_id: currentSessionId,
+            [action]: true
+        };
+        
+        try {
+            const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/user_activity', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(activityData)
+            });
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            // console.log(`Activity ${action} updated successfully`);
+        } catch (error) {
+            console.error('Error updating activity:', error);
+        }
+    }
+    
+    // Call this when loading a new summary
+    function onSummaryLoaded(summaryData) {
+        startNewSession(summaryData);
+    }
+
+    // Update event listeners
+    document.getElementById('copyButton').addEventListener('click', function() {
+        updateActivity('copied_summary');
+    });
+    document.getElementById('exportButton').addEventListener('click', function() {
+        updateActivity('summary_exported');
+    });
+
+// Call this when the app is about to close or when starting a new summary
+function endSession() {
+        currentSessionId = null;
+    }
 });
+
