@@ -11,7 +11,16 @@ function debounce(func, wait) {
     };
 }
 
-// ... rest of your existing code ...
+async function getFingerprint() {
+    // Ensure FingerprintJS is loaded
+    if (typeof FingerprintJS === 'undefined') {
+        console.error('FingerprintJS is not loaded');
+        return null;
+    }
+    const fp = await FingerprintJS.load();
+    const result = await fp.get();
+    return result.visitorId;
+}
 
 function displayError(errorMessage) {
     const resultContainer = document.getElementById('resultContainer');
@@ -104,6 +113,20 @@ if (exportButton) {
         setTimeout(() => { toast.className = toast.className.replace('show', ''); }, 3000);
     }
 
+    function showWelcomeToast(message) {
+        showToast(message);
+        if (typeof confetti === 'function') {
+            confetti({
+                particleCount: 100,
+                spread: 70,
+                origin: { y: 0.6 },
+                disableForReducedMotion: true
+            });
+        } else {
+            console.warn('Confetti function not available');
+        }
+    }
+
     async function getApiKey(keyName) {
         return new Promise((resolve) => {
             chrome.storage.local.get([keyName], function(result) {
@@ -188,12 +211,12 @@ if (exportButton) {
 
     async function getUserId() {
         return new Promise((resolve) => {
-            chrome.storage.local.get(['user_id'], function(result) {
-                if (result.user_id) {
-                    resolve(result.user_id);
+            chrome.storage.sync.get(['userId'], function(result) {
+                if (result.userId) {
+                    resolve(result.userId);
                 } else {
                     const newUserId = generateUUID();
-                    chrome.storage.local.set({ user_id: newUserId }, function() {
+                    chrome.storage.sync.set({userId: newUserId}, function() {
                         resolve(newUserId);
                     });
                 }
@@ -207,6 +230,7 @@ if (exportButton) {
             return v.toString(16);
         });
     }
+    
 
     function beautifySummary(summary) {
         // Split the summary into paragraphs
@@ -249,41 +273,59 @@ if (exportButton) {
     }
 
     function isInputValid(input) {
-        const minLength = 50; // Minimum length for text input
-        const urlPattern = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
-
-        // Check if the input is a valid URL
-        if (urlPattern.test(input)) {
-            return true; // Always consider URLs as valid input
+        const minLength = 200; // Minimum length for text input
+        const urlPattern = /https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)/gi;
+    
+        ////console.log("Validating input:", input);
+    
+        // Check if the input contains URLs
+        const urlMatches = input.match(urlPattern);
+        
+        if (urlMatches) {
+            ////console.log("URLs detected:", urlMatches.length);
+            if (urlMatches.length > 1) {
+                displayError('Please enter only one URL or paste the privacy policy text directly. Multiple URLs are not supported.');
+                return false;
+            }
+            return true; // Single URL is valid
         }
-
+    
         // For non-URL input, check the length
         if (input.trim().length < minLength) {
+            ////console.log("Input too short:", input.trim().length, "characters");
             displayError(`Please enter at least ${minLength} characters or a valid URL.`);
             return false;
         }
-
+    
+        ////console.log("Valid text input");
         return true;
     }
+
 
     if (summarizeBtn) {
         summarizeBtn.addEventListener('click', async function(event) {
             event.preventDefault();
-            if (await checkApiKeyAndOpenSettings()) {
-                debounce(summarize, 300)();
+            const input = inputText.value.trim();
+            ////console.log("Input:", input);
+            if (isInputValid(input)) {
+                if (await checkApiKeyAndOpenSettings()) {
+                    debounce(summarize, 300)();
+                }
             }
         });
     }
 
+    const maxRetries = 3;
+
     async function summarize() {
         try {
             if (!(await checkApiKeyAndOpenSettings())) {
-            return;
-        }
+                return;
+            }
             const inputText = document.getElementById('inputText').value.trim();
             const model = document.getElementById('modelSelect').value;
             const userId = await getUserId();
-            let token = await getValidToken(); // Changed from const to let
+            let token = await getValidToken();
             const startTime = Date.now();
     
             if (!inputText) {
@@ -335,42 +377,60 @@ if (exportButton) {
             }
     
             const useServerSideKey = freeSummariesLeft > 0;
+            let response;
+            for (let retryCount = 0; retryCount < maxRetries; retryCount++) {
+                try {
+                    response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/summarize', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            input: inputText,
+                            model: model,
+                            user_id: userId,
+                            is_url: isUrl,
+                            searched_data: inputText,
+                            scrape_data: scrapedContent,
+                            api_key: useServerSideKey ? 'server_side' : apiKey
+                        })
+                    });
     
-            const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/summarize', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    input: inputText,
-                    model: model,
-                    user_id: userId,
-                    is_url: isUrl,
-                    searched_data: inputText,
-                    scrape_data: scrapedContent,
-                    api_key: useServerSideKey ? 'server_side' : apiKey
-                })
-            });
-    
-            if (response.status === 403) {
-                const errorData = await response.json();
-                if (errorData.error === "No free summaries left") {
-                    throw new Error('No free summaries left');
-                } else {
-                    console.log('Received 403 error, attempting to refresh token');
-                    token = await requestNewToken();
-                    if (!token) {
-                        throw new Error('Failed to refresh authentication token');
+                    if (response.ok) {
+                        break;
                     }
-                    // Retry the request with the new token
-                    return await summarize();
+    
+                    const errorData = await response.json();
+                    if (response.status === 400 && errorData.error.includes("Failed to scrape website content")) {
+                        throw new Error('Unable to access the website content. Please try pasting the privacy policy text directly.');
+                    } else if (response.status === 403 && errorData.error === "No free summaries left") {
+                        throw new Error('No free summaries left');
+                    } else if (response.status === 503) {
+                        if (retryCount === maxRetries - 1) {
+                            throw new Error('Server temporarily unavailable. Please try again later.');
+                        }
+                        await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+                    } else if (response.status === 403) {
+                        console.log('Received 403 error, attempting to refresh token');
+                        await new Promise(resolve => setTimeout(resolve, 1000)); // Add a 1-second delay
+                        token = await requestNewToken();
+                        if (!token) {
+                            throw new Error('Failed to refresh authentication token');
+                        }
+                    } else {
+                        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                    }
+                } catch (error) {
+                    if (retryCount === maxRetries - 1) {
+                        throw error; // Rethrow the error if it's the last retry
+                    }
+                    console.error(`Attempt ${retryCount + 1} failed:`, error);
                 }
             }
     
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+            if (!response || !response.ok) {
+                throw new Error('Failed to get a valid response after retries');
             }
     
             const result = await response.json();
@@ -407,9 +467,14 @@ if (exportButton) {
             await sendUserActivity(activityData);
     
         } catch (error) {
-            if (error.message === 'No free summaries left and no valid API key provided') {
+            console.error('Summarize error:', error);
+            if (error.message.includes('Unable to access the website content')) {
+                displayError('Unable to access the website content. Please try pasting the privacy policy text directly.');
+            } else if (error.message.includes('No free summaries left')) {
                 displayError('You have used all your free summaries. Please enter your API key to continue.');
                 openSettingsModal();
+            } else if (error.message === 'Server temporarily unavailable. Please try again later.') {
+                displayError('Server is temporarily unavailable. Please try again in a few moments.');
             } else {
                 displayError(`Failed to summarize: ${error.message}`);
             }
@@ -417,14 +482,15 @@ if (exportButton) {
             hideLoader();
         }
     }
+
     async function checkApiKeyAndOpenSettings() {
         const model = document.getElementById('modelSelect').value;
         const freeSummariesLeft = await getFreeSummariesCount();
         const apiKey = await getApiKey(`${model}ApiKey`);
     
-        console.log('Model:', model);
-        console.log('Free summaries left:', freeSummariesLeft);
-        console.log('API Key exists:', !!apiKey);
+        ////console.log('Model:', model);
+        ////console.log('Free summaries left:', freeSummariesLeft);
+        ////console.log('API Key exists:', !!apiKey);
     
         if (freeSummariesLeft <= 0 && !apiKey) {
             displayError('You have used all your free summaries. Please enter your API key to continue.');
@@ -620,11 +686,10 @@ if (exportButton) {
         }
     }
 
-    async function fetchFreeSummariesCount() {
+    async function fetchAndUpdateFreeSummariesCount() {
         try {
             const userId = await getUserId();
             const token = await getValidToken();
-            // console.log('Fetching free summaries count for user:', userId);
             const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/get_free_summaries_count', {
                 method: 'POST',
                 headers: {
@@ -636,25 +701,15 @@ if (exportButton) {
                 })
             });
             const data = await response.json();
-            // console.log('Received data from server:', data);
-            if (data.free_summaries_left !== undefined) {
-                updateFreeSummariesDisplay(data.free_summaries_left);
-                if (data.new_user) {
-                    showToast("Welcome! You've been granted 10 free summaries.");
-                    // console.log('New user detected, granted 10 free summaries');
-                }
-            } else {
-                // console.log('Free summaries count not found in response');
-                updateFreeSummariesDisplay(0);
-            }
+            const count = data.free_summaries_left !== undefined ? data.free_summaries_left : 0;
+            updateFreeSummariesDisplay(count);
+            return count;
         } catch (error) {
             console.error('Error fetching free summaries count:', error);
             updateFreeSummariesDisplay(0);
+            return 0;
         }
     }
-
-    // Call this function when the popup opens
-    fetchFreeSummariesCount();
 
     // Add this function to check for saved API keys and update the model select options
     async function updateModelSelectOptions() {
@@ -963,7 +1018,7 @@ if (exportButton) {
             .then(response => response.json())
             .then(data => {
                 ttsEndpointUrl = data.tts_endpoint;
-                // console.log("TTS endpoint URL:", ttsEndpointUrl);
+                // ////console.log("TTS endpoint URL:", ttsEndpointUrl);
             })
             .catch(error => {
                 console.error('Error fetching TTS endpoint URL:', error);
@@ -1006,7 +1061,7 @@ if (exportButton) {
                 throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || 'Unknown error'}`);
             }
     
-            // console.log('User activity sent successfully');
+            // ////console.log('User activity sent successfully');
         } catch (error) {
             console.error('Error sending user activity:', error);
         }
@@ -1047,23 +1102,30 @@ if (exportButton) {
     async function displayUserInfo() {
         try {
             const userId = await getUserId();
-            const token = await getValidToken();  // Changed from getOrCreateToken
+            //console.log("User ID:", userId);
+            const token = await getValidToken();
+            //console.log("Token received:", token ? "Yes" : "No");
+            
             if (!token) {
-                console.error('Failed to get or create token');
-                return;
+                throw new Error('Failed to get or create token');
             }
+            
             const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/get_user_info', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ user_id: userId })
+                }
             });
+            
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
+            
             const data = await response.json();
+            //console.log("User info data:", data);
+            
+            // Update account creation date
             if (data.created_at) {
                 const createdDate = new Date(data.created_at).toLocaleDateString();
                 const userInfoElement = document.getElementById('userInfo');
@@ -1071,8 +1133,17 @@ if (exportButton) {
                     userInfoElement.textContent = `Account created on: ${createdDate}`;
                 }
             }
+            
+            // Fetch and update free summaries count
+            await fetchAndUpdateFreeSummariesCount();
+            
+            // Show welcome message for new users
+            if (data.new_user) {
+                showWelcomeToast("Welcome! You've been granted 10 free summaries.");
+            }
         } catch (error) {
-            console.error('Error fetching user info:', error);
+            console.error('Error in displayUserInfo:', error);
+            showToast(`Error: ${error.message}`);
         }
     }
 
@@ -1096,37 +1167,6 @@ if (exportButton) {
         updateActivity('export');  // Add this line
     }
 
-  
-    async function requestNewToken() {
-        const userId = await getUserId();
-        try {
-            const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/get_or_create_token', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ user_id: userId })
-            });
-    
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-    
-            const data = await response.json();
-            const newToken = data.token;
-    
-            // Store the new token
-            chrome.storage.local.set({ auth_token: newToken }, function() {
-                // console.log('New token saved to storage');
-            });
-    
-            return newToken;
-        } catch (error) {
-            console.error('Error requesting new token:', error);
-            return null;
-        }
-    }
-    
     async function getValidToken() {
         let token = await new Promise((resolve) => {
             chrome.storage.local.get(['auth_token'], function(result) {
@@ -1134,9 +1174,18 @@ if (exportButton) {
             });
         });
     
+        async function handleNewToken() {
+            const response = await requestNewToken();
+            if (response.new_user) {
+                showToast("Welcome! You've been granted 10 free summaries.");
+                await fetchAndUpdateFreeSummariesCount();
+            }
+            return response.token;
+        }
+    
         if (!token) {
-            // console.log('No token found, requesting new token');
-            return await requestNewToken();
+            //console.log('No token found, requesting new token');
+            return await handleNewToken();
         }
     
         // Check if the token is expired
@@ -1145,32 +1194,119 @@ if (exportButton) {
             const exp = payload.exp;
             const currentTimestamp = Math.floor(Date.now() / 1000);
             if (currentTimestamp > exp) {
-                // console.log('Token expired, requesting new token');
-                return await requestNewToken();
+                //console.log('Token expired, requesting new token');
+                return await handleNewToken();
             }
         } catch (error) {
             console.error('Error parsing token:', error);
-            return await requestNewToken();
+            return await handleNewToken();
         }
     
         return token;
     }
-
-    async function testToken() {
-        const token = await getValidToken();
+    
+    async function getOrCreateUser() {
         try {
-            const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/verify_token', {
+            //console.log("Generating fingerprint...");
+            const fingerprint = await getFingerprint();
+            //console.log("Fingerprint generated:", fingerprint);
+            
+            const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/new-user', {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fingerprint })
             });
             const data = await response.json();
-            // console.log("Token verification result:", data);
+            //console.log("Server response:", data);
+    
+            if (!response.ok) {
+                throw new Error(data.error || `HTTP error! status: ${response.status}`);
+            }
+    
+            return { 
+                fingerprint, 
+                userId: data.user_id, 
+                new_user: data.new_user, 
+                summaries_left: data.summaries_left 
+            };
         } catch (error) {
-            console.error("Error verifying token:", error);
+            console.error('Error in getOrCreateUser:', error);
+            showToast(`Error: ${error.message}`);
+            throw error;
         }
     }
+    
+    async function requestNewToken() {
+        try {
+            //console.log("Requesting new token...");
+            const { userId, fingerprint } = await getOrCreateUser();
+            //console.log("User data:", { userId, fingerprint });
+    
+            const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/get_or_create_token', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ user_id: userId, fingerprint: fingerprint })
+            });
+    
+            //console.log("Token request response status:", response.status);
+    
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || 'Unknown error'}`);
+            }
+    
+            const data = await response.json();
+            //console.log("Token response data:", data);
+    
+            if (!data.token) {
+                throw new Error('No token received from server');
+            }
+    
+            const newToken = data.token;
+    
+            // Store the new token
+            chrome.storage.local.set({ auth_token: newToken }, function() {
+                //console.log('New token saved to storage');
+            });
+    
+            return { token: newToken, new_user: data.new_user };
+        } catch (error) {
+            console.error('Error requesting new token:', error);
+            showToast(`Error: ${error.message}`);
+            return { token: null, new_user: false, error: error.message };
+        }
+    }
+
+async function getOrCreateUser() {
+    try {
+        //console.log("Generating fingerprint...");
+        const fingerprint = await getFingerprint();
+        //console.log("Fingerprint generated:", fingerprint);
+        const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/new-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fingerprint })
+        });
+        const data = await response.json();
+        //console.log("Server response:", data);
+
+        if (!response.ok) {
+            throw new Error(data.error || `HTTP error! status: ${response.status}`);
+        }
+
+        return { 
+            userId: data.user_id, 
+            fingerprint, 
+            new_user: data.new_user 
+        };
+    } catch (error) {
+        console.error('Error in getOrCreateUser:', error);
+        showToast(`Error: ${error.message}`);
+        throw error;
+    }
+}
     
     function startNewSession(summaryData) {
         currentSessionId = generateSessionId();
@@ -1241,7 +1377,7 @@ if (exportButton) {
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-            // console.log(`Activity ${action} updated successfully`);
+            // ////console.log(`Activity ${action} updated successfully`);
         } catch (error) {
             console.error('Error updating activity:', error);
         }
@@ -1265,4 +1401,3 @@ function endSession() {
         currentSessionId = null;
     }
 });
-

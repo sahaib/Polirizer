@@ -2,6 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://summariser-test-f7ab30f38c51.herokuapp.com;">
     <title>Polirizer</title>
     <!-- Add this line to import the Noto Sans font -->
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;700&display=swap" rel="stylesheet">
@@ -25,6 +26,16 @@
         h1 {
             margin: 0;
             font-size: 24px;
+        }
+        #toast {
+            z-index: 10000; /* Ensure it's on top */
+        }
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 9999;
         }
         #settingsBtn {
             background: none;
@@ -596,6 +607,8 @@
     <script src="purify.min.js"></script>
     <script src="popup.js"></script>
     <script src="lib/marked.min.js"></script>
+    <script src="lib/confetti.browser.min.js"></script>
+    <script src="lib/fingerprint.js"></script>
 </head>
 <body>
     <div id="freeSummaries"></div>
