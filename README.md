@@ -50,7 +50,7 @@ To set up the development environment:
 If you discover any security-related issues, please email hello@sahaibsingh.com instead of using the issue tracker.
 
 ## Privacy
-Polirizer is committed to user privacy. For details on data handling and privacy practices, please refer to our [Privacy Policy](PRIVACY.md).
+Polirizer is committed to user privacy. For details on data handling and privacy practices, please refer to our [Privacy Policy](PrivacyPolicy.md).
 
 ## App Preview
 
