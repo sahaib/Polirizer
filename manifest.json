@@ -1,8 +1,8 @@
 {
     "manifest_version": 3,
-    "name": "Polirizer",
-    "version": "2.6.4",
-    "description": "Summarize privacy policies using AI",
+    "name": "Polirizer - Privacy Policy Summarizer",
+    "version": "2.6.5",
+    "description": "Summarize privacy policies and terms of service using AI",
     "permissions": [
         "storage"
     ],

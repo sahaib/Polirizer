@@ -69,7 +69,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const modelSelect = document.getElementById('modelSelect');
     const summarizeBtn = document.getElementById('summarizeBtn');
     const resultDiv = document.getElementById('resultDiv');
-    const loaderContainer = document.getElementById('loaderContainer');
     const settingsBtn = document.getElementById('settingsBtn');
     const settingsModal = document.getElementById('settingsModal');
     const closeSettingsBtn = document.getElementById('closeSettingsBtn');
@@ -78,6 +77,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const ttsButton = document.getElementById('ttsButton');
     const ttsVoiceSelect = document.getElementById('ttsVoiceSelect');
     const exportButton = document.getElementById('exportButton');
+    const inputContainer = document.getElementById("inputContainer");
+    const loaderContainer = document.getElementById("loaderContainer");
     let lastInput = '';
     let lastModel = '';
     let currentAudio = null;
@@ -91,6 +92,37 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentSessionId = null;
     
     fetchTtsEndpointUrl();
+
+    function charCounter(inputField) {
+        const maxLength = inputField.getAttribute("maxlength");
+        const currentLength = inputField.value.length;
+        const progressBar = document.getElementById("progress-bar");
+        const remChars = document.getElementById("remaining-chars");
+        const progressContainer = document.getElementById("progressContainer");
+        const progressWidth = (currentLength / maxLength) * 100;
+        progressBar.style.width = `${progressWidth}%`;
+        remChars.style.display = "none";
+    
+        if (progressWidth <= 60) {
+            progressBar.style.backgroundColor = "rgb(19, 160, 19)";
+        } else if (progressWidth > 60 && progressWidth < 85) {
+            progressBar.style.backgroundColor = "rgb(236, 157, 8)";
+        } else {
+            progressBar.style.backgroundColor = "rgb(241, 9, 9)";
+            remChars.innerHTML = `${maxLength - currentLength} characters left`;
+            remChars.style.display = "block";
+        }
+    
+        // Show progress container only when there's input
+        progressContainer.style.display = currentLength > 0 ? "block" : "none";
+    }
+    
+    inputText.oninput = () => charCounter(inputText);
+    
+    // Initially hide the progress container
+    const progressContainer = document.getElementById("progressContainer");
+    progressContainer.style.display = "none";
+    
 
 // Update the export button event listener
 if (exportButton) {
@@ -242,27 +274,47 @@ if (exportButton) {
         return htmlParagraphs;
     }
 
+    
     function showLoader() {
         if (loaderContainer) {
             loaderContainer.style.display = 'flex';
             // Hide other elements
             document.getElementById('resultContainer').style.display = 'none';
-            document.getElementById('inputText').style.display = 'none';
-            document.getElementById('modelSelect').style.display = 'none';
+            inputContainer.style.display = 'none';
+            progressContainer.style.display = 'none';
+            modelSelect.style.display = 'none';
             summarizeBtn.style.display = 'none';
         }
     }
-
+    
     function hideLoader() {
         if (loaderContainer) {
             loaderContainer.style.display = 'none';
-            // Show other elements™
-            document.getElementById('inputText').style.display = 'block';
-            document.getElementById('modelSelect').style.display = 'inline-block';
+            // Show other elements
+            inputContainer.style.display = 'block';
+            progressContainer.style.display = 'block';
+            modelSelect.style.display = 'inline-block';
             summarizeBtn.style.display = 'inline-block';
             // resultContainer will be shown by displaySummary or displayError
         }
     }
+    
+    // Your existing charCounter function remains the same
+    
+    // Update your summarize function to use showLoader and hideLoader
+    async function summarize() {
+        showLoader();
+        try {
+            // Your existing summarization logic
+        } catch (error) {
+            // Error handling
+        } finally {
+            hideLoader();
+        }
+    }
+    
+    // Make sure to call summarize when the summarize button is clicked
+    document.getElementById('summarizeBtn').addEventListener('click', summarize);
 
     function toggleSummarizeButton(disabled) {
         if (summarizeBtn) {
