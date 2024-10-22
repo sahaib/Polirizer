@@ -41,7 +41,7 @@
     },
     "web_accessible_resources": [
         {
-            "resources": ["config.js","fingerprint.js"],
+            "resources": ["config.js","fingerprint.js","styles.css","feather.min.js"],
             "matches": ["<all_urls>"]
         }
     ]

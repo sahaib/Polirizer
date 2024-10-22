@@ -79,6 +79,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const exportButton = document.getElementById('exportButton');
     const inputContainer = document.getElementById("inputContainer");
     const loaderContainer = document.getElementById("loaderContainer");
+    const darkModeToggle = document.getElementById('darkModeToggle');
     let lastInput = '';
     let lastModel = '';
     let currentAudio = null;
@@ -90,8 +91,24 @@ document.addEventListener('DOMContentLoaded', function() {
     let lastActivityType = null;
     let lastActivityTime = 0;
     let currentSessionId = null;
+    feather.replace();
     
     fetchTtsEndpointUrl();
+
+    // Check for saved dark mode preference
+    if (localStorage.getItem('darkMode') === 'enabled') {
+        document.body.classList.add('dark-mode');
+    }
+
+    // Dark mode toggle functionality
+    darkModeToggle.addEventListener('click', () => {
+        document.body.classList.toggle('dark-mode');
+        if (document.body.classList.contains('dark-mode')) {
+            localStorage.setItem('darkMode', 'enabled');
+        } else {
+            localStorage.setItem('darkMode', null);
+        }
+    });
 
     function charCounter(inputField) {
         const maxLength = inputField.getAttribute("maxlength");
