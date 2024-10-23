@@ -37,6 +37,7 @@ To set up the development environment:
 2. Run `npm install` to install dependencies.
 3. Use `npm run build` to build the extension.
 4. For development with hot-reloading, use `npm run dev`.
+5. Backend setup 'https://github.com/sahaib/PolirizerBackend'
 
 ## Testing
 - Run unit tests with `npm test`.
