@@ -319,16 +319,16 @@ if (exportButton) {
     // Your existing charCounter function remains the same
     
     // Update your summarize function to use showLoader and hideLoader
-    async function summarize() {
-        showLoader();
-        try {
-            // Your existing summarization logic
-        } catch (error) {
-            // Error handling
-        } finally {
-            hideLoader();
-        }
-    }
+    // async function summarize() {
+    //     showLoader();
+    //     try {
+    //         // Your existing summarization logic
+    //     } catch (error) {
+    //         // Error handling
+    //     } finally {
+    //         hideLoader();
+    //     }
+    // }
     
     // Make sure to call summarize when the summarize button is clicked
     document.getElementById('summarizeBtn').addEventListener('click', summarize);
@@ -345,28 +345,30 @@ if (exportButton) {
         const minLength = 200; // Minimum length for text input
         const urlPattern = /https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)/gi;
     
-        ////console.log("Validating input:", input);
+        // Trim the input and get its length
+        const trimmedInput = input.trim();
+        const inputLength = trimmedInput.length;
     
         // Check if the input contains URLs
-        const urlMatches = input.match(urlPattern);
+        const urlMatches = trimmedInput.match(urlPattern);
         
-        if (urlMatches) {
-            ////console.log("URLs detected:", urlMatches.length);
-            if (urlMatches.length > 1) {
-                displayError('Please enter only one URL or paste the privacy policy text directly. Multiple URLs are not supported.');
-                return false;
-            }
-            return true; // Single URL is valid
+        if (urlMatches && urlMatches.length > 1) {
+            displayError('Please enter only one URL or paste the privacy policy text directly. Multiple URLs are not supported.');
+            return false;
+        }
+    
+        // If it's a single URL, it's valid
+        if (urlMatches && urlMatches.length === 1 && urlMatches[0] === trimmedInput) {
+            return true;
         }
     
         // For non-URL input, check the length
-        if (input.trim().length < minLength) {
-            ////console.log("Input too short:", input.trim().length, "characters");
+        if (inputLength < minLength) {
             displayError(`Please enter at least ${minLength} characters or a valid URL.`);
             return false;
         }
     
-        ////console.log("Valid text input");
+        // If we've reached here, the input is valid (either long enough text or a single URL within text)
         return true;
     }
 
@@ -375,11 +377,15 @@ if (exportButton) {
         summarizeBtn.addEventListener('click', async function(event) {
             event.preventDefault();
             const input = inputText.value.trim();
-            ////console.log("Input:", input);
+            //console.log("Input:", input);
+            
+            if (input === '') {
+                displayError('Please enter some text or a URL to summarize.');
+                return;
+            }
+            
             if (isInputValid(input)) {
-                if (await checkApiKeyAndOpenSettings()) {
-                    debounce(summarize, 300)();
-                }
+                debounce(summarize, 300)();
             }
         });
     }
@@ -388,19 +394,14 @@ if (exportButton) {
 
     async function summarize() {
         try {
-            if (!(await checkApiKeyAndOpenSettings())) {
-                return;
-            }
+            // if (!(await checkApiKeyAndOpenSettings())) {
+            //     return;
+            // }
             const inputText = document.getElementById('inputText').value.trim();
             const model = document.getElementById('modelSelect').value;
             const userId = await getUserId();
             let token = await getValidToken();
             const startTime = Date.now();
-    
-            if (!inputText) {
-                displayError('Please enter some text or a URL to summarize.');
-                return;
-            }
     
             const maxInputLength = 50000;
             if (inputText.length > maxInputLength) {
@@ -481,7 +482,7 @@ if (exportButton) {
                         }
                         await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
                     } else if (response.status === 403) {
-                        console.log('Received 403 error, attempting to refresh token');
+                        //console.log('Received 403 error, attempting to refresh token');
                         await new Promise(resolve => setTimeout(resolve, 1000)); // Add a 1-second delay
                         token = await requestNewToken();
                         if (!token) {
@@ -553,13 +554,9 @@ if (exportButton) {
     }
 
     async function checkApiKeyAndOpenSettings() {
-        const model = document.getElementById('modelSelect').value;
         const freeSummariesLeft = await getFreeSummariesCount();
+        const model = document.getElementById('modelSelect').value;
         const apiKey = await getApiKey(`${model}ApiKey`);
-    
-        ////console.log('Model:', model);
-        ////console.log('Free summaries left:', freeSummariesLeft);
-        ////console.log('API Key exists:', !!apiKey);
     
         if (freeSummariesLeft <= 0 && !apiKey) {
             displayError('You have used all your free summaries. Please enter your API key to continue.');
@@ -1087,7 +1084,7 @@ if (exportButton) {
             .then(response => response.json())
             .then(data => {
                 ttsEndpointUrl = data.tts_endpoint;
-                // ////console.log("TTS endpoint URL:", ttsEndpointUrl);
+                // //console.log("TTS endpoint URL:", ttsEndpointUrl);
             })
             .catch(error => {
                 console.error('Error fetching TTS endpoint URL:', error);
@@ -1130,7 +1127,7 @@ if (exportButton) {
                 throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || 'Unknown error'}`);
             }
     
-            // ////console.log('User activity sent successfully');
+            // //console.log('User activity sent successfully');
         } catch (error) {
             console.error('Error sending user activity:', error);
         }
@@ -1170,6 +1167,7 @@ if (exportButton) {
 
     async function displayUserInfo() {
         try {
+            //console.log("displayUserInfo function called");
             const userId = await getUserId();
             //console.log("User ID:", userId);
             const token = await getValidToken();
@@ -1206,18 +1204,15 @@ if (exportButton) {
             // Fetch and update free summaries count
             await fetchAndUpdateFreeSummariesCount();
             
-            // Show welcome message for new users
-            if (data.new_user) {
-                showWelcomeToast("Welcome! You've been granted 10 free summaries.");
-            }
         } catch (error) {
             console.error('Error in displayUserInfo:', error);
             showToast(`Error: ${error.message}`);
         }
     }
-
+    
     // Call this function when the popup opens
     displayUserInfo();
+    getOrCreateUser();
 
     function exportSummary() {
         const summaryContainer = document.getElementById('summaryContainer');
@@ -1276,27 +1271,26 @@ if (exportButton) {
     
     async function getOrCreateUser() {
         try {
-            //console.log("Generating fingerprint...");
             const fingerprint = await getFingerprint();
-            //console.log("Fingerprint generated:", fingerprint);
-            
             const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/new-user', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ fingerprint })
             });
             const data = await response.json();
-            //console.log("Server response:", data);
     
             if (!response.ok) {
                 throw new Error(data.error || `HTTP error! status: ${response.status}`);
             }
     
+            if (data.new_user) {
+                showWelcomeToast("Welcome! You've been granted 10 free summaries.");
+            }
+    
             return { 
-                fingerprint, 
                 userId: data.user_id, 
-                new_user: data.new_user, 
-                summaries_left: data.summaries_left 
+                fingerprint, 
+                new_user: data.new_user 
             };
         } catch (error) {
             console.error('Error in getOrCreateUser:', error);
@@ -1348,34 +1342,6 @@ if (exportButton) {
         }
     }
 
-async function getOrCreateUser() {
-    try {
-        //console.log("Generating fingerprint...");
-        const fingerprint = await getFingerprint();
-        //console.log("Fingerprint generated:", fingerprint);
-        const response = await fetch('https://summariser-test-f7ab30f38c51.herokuapp.com/new-user', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fingerprint })
-        });
-        const data = await response.json();
-        //console.log("Server response:", data);
-
-        if (!response.ok) {
-            throw new Error(data.error || `HTTP error! status: ${response.status}`);
-        }
-
-        return { 
-            userId: data.user_id, 
-            fingerprint, 
-            new_user: data.new_user 
-        };
-    } catch (error) {
-        console.error('Error in getOrCreateUser:', error);
-        showToast(`Error: ${error.message}`);
-        throw error;
-    }
-}
     
     function startNewSession(summaryData) {
         currentSessionId = generateSessionId();
@@ -1446,7 +1412,7 @@ async function getOrCreateUser() {
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-            // ////console.log(`Activity ${action} updated successfully`);
+            // //console.log(`Activity ${action} updated successfully`);
         } catch (error) {
             console.error('Error updating activity:', error);
         }
