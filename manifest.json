@@ -1,0 +1,44 @@
+{
+    "manifest_version": 3,
+    "name": "Polirizer - Privacy Policy Summarizer",
+    "version": "2.8.0",
+    "description": "Summarize privacy policies and terms of service using AI",
+    "permissions": [
+        "storage"
+    ],
+    "host_permissions": [
+        "https://your_server_endpoint/",
+        "https://*/*",
+        "https://api.openai.com/"
+    ],
+    "content_scripts": [
+        {
+            "matches": ["<all_urls>"],
+            "js": ["purify.min.js","lib/confetti.browser.min.js"]
+        }
+    ],
+    "content_security_policy": {
+        "extension_pages": "script-src 'self'; object-src 'self';"
+    },
+    "action": {
+        "default_popup": "popup.html",
+        "default_icon": {
+            "16": "icon16.png",
+            "32": "icon32.png",
+            "48": "icon48.png",
+            "128": "icon128.png"
+        }
+    },
+    "icons": {
+        "16": "icon16.png",
+        "32": "icon32.png",
+        "48": "icon48.png",
+        "128": "icon128.png"
+    },
+    "web_accessible_resources": [
+        {
+            "resources": ["config.js","fingerprint.js","styles.css","feather.min.js"],
+            "matches": ["<all_urls>"]
+        }
+    ]
+}
