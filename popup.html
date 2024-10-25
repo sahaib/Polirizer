@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://your_server_endpoint;">
+    <title>Polirizer</title>
+    <!-- import the Noto Sans font -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <script src="purify.min.js"></script>
+    <script src="popup.js"></script>
+    <script src="lib/marked.min.js"></script>
+    <script src="lib/confetti.browser.min.js"></script>
+    <script src="lib/fingerprint.js"></script>
+    <script src="lib/feather.min.js"></script>
+</head>
+<body>
+    <div id="freeSummaries"></div>
+    <div class="header">
+        <div class="header-left">
+            <img src="Polirizer.png" alt="Polirizer Logo" class="logo">
+            <h1>Polirizer</h1>
+        </div>
+        <div class="header-right">
+            <button id="darkModeToggle" class="icon-button">
+                <i data-feather="moon"></i>
+            </button>
+            <button id="settingsBtn" class="icon-button">
+                <i data-feather="settings"></i>
+            </button>
+        </div>
+    </div>
+    <div id="freeSummariesCounter"></div>
+    <div id="userInfo"></div>
+    <div id="inputContainer">
+        <textarea id="inputText" placeholder="Enter URL or paste privacy policy text" maxlength="50000"></textarea>
+        <div id="progressContainer">
+            <div id="progress">
+                <div id="progress-bar"></div>
+            </div>
+            <p id="remaining-chars"></p>
+        </div>
+    </div>
+    <select id="modelSelect">
+        <!-- Options will be dynamically populated by JavaScript -->
+    </select>
+    <button id="summarizeBtn">Summarize</button>
+    
+    <div id="loaderContainer" class="loader-container" style="display: none;">
+        <div class="loader">
+            <div>
+                <ul>
+                    <li>
+                        <svg viewBox="0 0 90 120" fill="currentColor">
+                            <path d="M90,0 L90,120 L11,120 C4.92486775,120 0,115.075132 0,109 L0,11 C0,4.92486775 4.92486775,0 11,0 L90,0 Z M71.5,81 L18.5,81 C17.1192881,81 16,82.1192881 16,83.5 C16,84.8254834 17.0315359,85.9100387 18.3356243,85.9946823 L18.5,86 L71.5,86 C72.8807119,86 74,84.8807119 74,83.5 C74,82.1745166 72.9684641,81.0899613 71.6643757,81.0053177 L71.5,81 Z M71.5,57 L18.5,57 C17.1192881,57 16,58.1192881 16,59.5 C16,60.8254834 17.0315359,61.9100387 18.3356243,61.9946823 L18.5,62 L71.5,62 C72.8807119,62 74,60.8807119 74,59.5 C74,58.1192881 72.8807119,57 71.5,57 Z M71.5,33 L18.5,33 C17.1192881,33 16,34.1192881 16,35.5 C16,36.8254834 17.0315359,37.9100387 18.3356243,37.9946823 L18.5,38 L71.5,38 C72.8807119,38 74,36.8807119 74,35.5 C74,34.1192881 72.8807119,33 71.5,33 Z" />
+                        </svg>
+                    </li>
+                    <li>
+                        <svg viewBox="0 0 90 120" fill="currentColor">
+                            <path d="M90,0 L90,120 L11,120 C4.92486775,120 0,115.075132 0,109 L0,11 C0,4.92486775 4.92486775,0 11,0 L90,0 Z M71.5,81 L18.5,81 C17.1192881,81 16,82.1192881 16,83.5 C16,84.8254834 17.0315359,85.9100387 18.3356243,85.9946823 L18.5,86 L71.5,86 C72.8807119,86 74,84.8807119 74,83.5 C74,82.1745166 72.9684641,81.0899613 71.6643757,81.0053177 L71.5,81 Z M71.5,57 L18.5,57 C17.1192881,57 16,58.1192881 16,59.5 C16,60.8254834 17.0315359,61.9100387 18.3356243,61.9946823 L18.5,62 L71.5,62 C72.8807119,62 74,60.8807119 74,59.5 C74,58.1192881 72.8807119,57 71.5,57 Z M71.5,33 L18.5,33 C17.1192881,33 16,34.1192881 16,35.5 C16,36.8254834 17.0315359,37.9100387 18.3356243,37.9946823 L18.5,38 L71.5,38 C72.8807119,38 74,36.8807119 74,35.5 C74,34.1192881 72.8807119,33 71.5,33 Z" />
+                        </svg>
+                    </li>
+                    <li>
+                        <svg viewBox="0 0 90 120" fill="currentColor">
+                            <path d="M90,0 L90,120 L11,120 C4.92486775,120 0,115.075132 0,109 L0,11 C0,4.92486775 4.92486775,0 11,0 L90,0 Z M71.5,81 L18.5,81 C17.1192881,81 16,82.1192881 16,83.5 C16,84.8254834 17.0315359,85.9100387 18.3356243,85.9946823 L18.5,86 L71.5,86 C72.8807119,86 74,84.8807119 74,83.5 C74,82.1745166 72.9684641,81.0899613 71.6643757,81.0053177 L71.5,81 Z M71.5,57 L18.5,57 C17.1192881,57 16,58.1192881 16,59.5 C16,60.8254834 17.0315359,61.9100387 18.3356243,61.9946823 L18.5,62 L71.5,62 C72.8807119,62 74,60.8807119 74,59.5 C74,58.1192881 72.8807119,57 71.5,57 Z M71.5,33 L18.5,33 C17.1192881,33 16,34.1192881 16,35.5 C16,36.8254834 17.0315359,37.9100387 18.3356243,37.9946823 L18.5,38 L71.5,38 C72.8807119,38 74,36.8807119 74,35.5 C74,34.1192881 72.8807119,33 71.5,33 Z" />
+                        </svg>
+                    </li>
+                    <li>
+                        <svg viewBox="0 0 90 120" fill="currentColor">
+                            <path d="M90,0 L90,120 L11,120 C4.92486775,120 0,115.075132 0,109 L0,11 C0,4.92486775 4.92486775,0 11,0 L90,0 Z M71.5,81 L18.5,81 C17.1192881,81 16,82.1192881 16,83.5 C16,84.8254834 17.0315359,85.9100387 18.3356243,85.9946823 L18.5,86 L71.5,86 C72.8807119,86 74,84.8807119 74,83.5 C74,82.1745166 72.9684641,81.0899613 71.6643757,81.0053177 L71.5,81 Z M71.5,57 L18.5,57 C17.1192881,57 16,58.1192881 16,59.5 C16,60.8254834 17.0315359,61.9100387 18.3356243,61.9946823 L18.5,62 L71.5,62 C72.8807119,62 74,60.8807119 74,59.5 C74,58.1192881 72.8807119,57 71.5,57 Z M71.5,33 L18.5,33 C17.1192881,33 16,34.1192881 16,35.5 C16,36.8254834 17.0315359,37.9100387 18.3356243,37.9946823 L18.5,38 L71.5,38 C72.8807119,38 74,36.8807119 74,35.5 C74,34.1192881 72.8807119,33 71.5,33 Z" />
+                        </svg>
+                    </li>
+                    <li>
+                        <svg viewBox="0 0 90 120" fill="currentColor">
+                            <path d="M90,0 L90,120 L11,120 C4.92486775,120 0,115.075132 0,109 L0,11 C0,4.92486775 4.92486775,0 11,0 L90,0 Z M71.5,81 L18.5,81 C17.1192881,81 16,82.1192881 16,83.5 C16,84.8254834 17.0315359,85.9100387 18.3356243,85.9946823 L18.5,86 L71.5,86 C72.8807119,86 74,84.8807119 74,83.5 C74,82.1745166 72.9684641,81.0899613 71.6643757,81.0053177 L71.5,81 Z M71.5,57 L18.5,57 C17.1192881,57 16,58.1192881 16,59.5 C16,60.8254834 17.0315359,61.9100387 18.3356243,61.9946823 L18.5,62 L71.5,62 C72.8807119,62 74,60.8807119 74,59.5 C74,58.1192881 72.8807119,57 71.5,57 Z M71.5,33 L18.5,33 C17.1192881,33 16,34.1192881 16,35.5 C16,36.8254834 17.0315359,37.9100387 18.3356243,37.9946823 L18.5,38 L71.5,38 C72.8807119,38 74,36.8807119 74,35.5 C74,34.1192881 72.8807119,33 71.5,33 Z" />
+                        </svg>
+                    </li>
+                </ul>
+            </div>
+            <span>Summarizing...</span>
+        </div>
+    </div>
+    
+    <div id="resultContainer" style="display: none;">
+        <div class="summary-header">
+            <h2>Summary</h2>
+            <div class="summary-actions">
+                <button id="copyButton" class="icon-button" title="Copy Summary">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                </button>
+                <button id="ttsButton" class="icon-button" title="Read Summary Aloud">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 5L6 9H2v6h4l5 4V5zM19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                    </svg>
+                </button>
+                <!-- Add this button next to the existing buttons in the summary-actions div -->
+                <button id="exportButton" class="icon-button" title="Export Summary">
+                    <i data-feather="download"></i>
+                </button>
+            </div>
+        </div>
+        <div id="summaryContainer" style="display: block;color: #fff;background-color: #9106cb0a;border: 1px solid rgba(255, 255, 255, 0.1);border-radius: 15px;backdrop-filter: blur(30px);"></div></div>
+        <div id="resultDiv"></div>
+    </div>
+
+    <div id="settingsModal" class="modal">
+        <div class="modal-content" style="color: #fff; margin: 40px auto; background-color: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 15px; backdrop-filter: blur(10px);">
+            <span id="closeSettingsBtn" class="close" style="cursor: pointer; float: right;">&times;</span>
+            <h2>API & Voice Settings</h2>
+            <input type="password" id="gpt4oMiniApiKeyInput" placeholder="GPT-4o-mini API Key" style=" border-radius: 6px; border: inset; padding: 5px; margin: 5px;">
+            <input type="password" id="claudeApiKeyInput" placeholder="Claude API Key" style=" border-radius: 6px; border: inset; padding: 5px; margin: 5px;">
+            <input type="password" id="geminiApiKeyInput" placeholder="Gemini API Key" style=" border-radius: 6px; border: inset; padding: 5px; margin: 5px;">
+            <input type="password" id="mistralApiKeyInput" placeholder="Mistral API Key" style=" border-radius: 6px; border: inset; padding: 5px; margin: 5px;">
+            <select id="ttsVoiceSelect">
+                <option value="nova">Nova</option>
+                <option value="alloy">Alloy</option>
+                <option value="echo">Echo</option>
+                <option value="fable">Fable</option>
+                <option value="onyx">Onyx</option>
+                <option value="shimmer">Shimmer</option>
+            </select>
+            <button id="saveSettingsBtn">Save</button>
+        </div>
+    </div>
+</body>
+</html>
